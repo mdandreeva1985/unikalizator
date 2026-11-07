@@ -42,6 +42,7 @@ h1{margin:4px 0 6px;font-size:40px;line-height:1.1;font-weight:800;letter-spacin
 .quick{display:flex;gap:8px;margin:18px 0}
 .quick button{flex:1 1 0;min-width:0;height:48px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:18px;font-weight:600}
 .quick button.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.edge-note{font-size:13px;color:var(--ok)}
 .cancel{align-self:flex-start;border:0;background:none;padding:2px 0;color:var(--muted);font-size:14px;font-weight:600;text-decoration:underline;text-underline-offset:3px}
 .pill.cancel-pill{background:var(--soft);color:var(--muted)}
 .pick{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;height:64px;border:0;border-radius:20px;cursor:pointer;
@@ -142,7 +143,7 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
 </main>
 
 <script type="module">
-import { makeCopy, planFrames } from './app.js';
+import { makeCopy, planFrames, detectEdgeText } from './app.js';
 import { SALT, CODES } from './codes.js';
 
 // --- код доступа: вводится один раз на устройстве, дальше работает без интернета ---
@@ -351,13 +352,23 @@ async function run() {
     const job = queue.shift();
     setPill(job, 'work', 'Обработка');
     try {
+      // есть текст у краёв — обрезаем края по минимуму, чтобы надписи не срезались
+      job.ui.count.textContent = 'Проверяю края кадра…';
+      job.safeEdges = await detectEdgeText(job.file).catch(() => false);
+      if (job.safeEdges) {
+        const note = document.createElement('span');
+        note.className = 'edge-note';
+        note.textContent = 'У краёв есть текст — обрезаем края по минимуму';
+        job.ui.count.after(note);
+      }
+      updateJob(job, 0);
       for (let i = 1; i <= job.total; i++) {
         // Если видеокарта дала сбой, повторяем копию через программный кодировщик (до 3 попыток).
         let blob = null, lastErr = null;
         for (let attempt = 1; attempt <= 3 && !blob; attempt++) {
           try {
             blob = await makeCopy(job.file, (p) => updateJob(job, p),
-              { frame: job.frames[i - 1], signal: job.ctrl.signal, software: job.software });
+              { frame: job.frames[i - 1], signal: job.ctrl.signal, software: job.software, safeEdges: job.safeEdges });
           } catch (e) {
             if (job.cancelled || e.name === 'AbortError') throw e;
             console.warn('Попытка', attempt, 'не удалась:', e);

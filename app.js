@@ -36,7 +36,7 @@ export const SETTINGS = {
 // СИЛЬНАЯ УНИКАЛИЗАЦИЯ: заметнее глазу, но кадр «отпечатывается» уже по-другому.
 // Значения ниже заменяют обычные, когда включён переключатель.
 export const STRONG = {
-  zoomPct: [5.0, 7.5],        // приближение сильнее (больше — кадр становится мягче)
+  zoomPct: [4.5, 6.5],        // приближение сильнее (больше — кадр становится мягче)
   brightness: [-0.04, 0.04],
   contrast: [0.93, 1.08],
   saturation: [0.86, 1.16],
@@ -73,10 +73,19 @@ export function planFrames(total) {
 }
 
 // opts.strong — сильная уникализация; opts.frame — 'none' | 'white' | 'color'
+// БЕРЕЖНЫЕ КРАЯ: по горизонтали кадр сдвигаем только около центра (обрезка почти поровну
+// слева и справа). Если у краёв найден текст (opts.safeEdges) — приближение минимальное.
+export const EDGES = {
+  cropX: [0.4, 0.6],          // 0 — оставить левый край, 1 — правый; 0,5 — по центру
+  safeZoomPct: [1.5, 2.5],
+  safeCropX: [0.45, 0.55],
+};
+
 export function makeParams(opts = {}) {
   const S = opts.strong ? { ...SETTINGS, ...STRONG } : SETTINGS;
   const p = {
-    zoomPct: rnd(S.zoomPct), cropX: Math.random(), cropY: Math.random(),
+    zoomPct: opts.safeEdges ? rnd(EDGES.safeZoomPct) : rnd(S.zoomPct),
+    cropX: rnd(opts.safeEdges ? EDGES.safeCropX : EDGES.cropX), cropY: Math.random(),
     brightness: rnd(S.brightness), contrast: rnd(S.contrast),
     saturation: rnd(S.saturation), gamma: rnd(S.gamma),
     hueDeg: rnd(S.hueDeg), noise: rnd(S.noise),
@@ -191,6 +200,47 @@ function makeRenderer(w, h) {
       gl.finish();
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Есть ли у левого/правого края текст (субтитры, надписи)?
+// Смотрим 12 кадров: строка текста — это ряд резких перепадов яркости, который
+// идёт через центр кадра и заходит в крайние 6% по ширине.
+// ---------------------------------------------------------------------------
+export async function detectEdgeText(file) {
+  const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
+  try {
+    const track = await input.getPrimaryVideoTrack();
+    if (!track) return false;
+    const dur = await input.computeDuration();
+    const w = 180, h = Math.max(2, Math.round(180 * track.displayHeight / track.displayWidth));
+    const sink = new CanvasSink(track, { width: w, height: h, fit: 'fill', poolSize: 1 });
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const times = Array.from({ length: 12 }, (_, i) => dur * (0.06 + 0.88 * i / 11));
+    const strip = Math.max(3, Math.round(w * 0.06));
+    let flagged = 0, checked = 0;
+    for await (const wc of sink.canvasesAtTimestamps(times)) {
+      if (!wc) continue;
+      checked++;
+      ctx.drawImage(wc.canvas, 0, 0);
+      const px = ctx.getImageData(0, 0, w, h).data;
+      const L = (x, y) => { const i = (y * w + x) * 4; return 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; };
+      let textRows = 0;
+      for (let y = 0; y < h; y++) {
+        let left = 0, right = 0, mid = 0;
+        for (let x = 0; x < w - 1; x++) {
+          if (Math.abs(L(x + 1, y) - L(x, y)) < 70) continue;
+          if (x < strip) left++; else if (x >= w - 1 - strip) right++; else mid++;
+        }
+        if (mid >= 10 && (left >= 2 || right >= 2)) textRows++;
+      }
+      if (textRows >= 3) flagged++;
+    }
+    return checked > 0 && flagged >= 2;
+  } finally {
+    input.dispose?.();
+  }
 }
 
 // ---------------------------------------------------------------------------
