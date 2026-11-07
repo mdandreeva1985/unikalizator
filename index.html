@@ -90,6 +90,11 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
 .gate-buy{color:var(--muted);font-size:15px;background:none;border:0;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .gate-buy[hidden]{display:none}
 .gate-buy-btn{display:flex;align-items:center;justify-content:center;height:56px;border-radius:18px;background:var(--ink);color:var(--bg);font-weight:700;font-size:17px;text-decoration:none}
+.inapp{display:flex;flex-direction:column;gap:6px;background:#16161a;color:#fff;border-radius:18px;padding:16px;margin:-8px 0 18px}
+.inapp[hidden]{display:none}
+.inapp b{font-size:16px}
+.inapp span{font-size:14px;opacity:.85;line-height:1.4}
+.inapp a{align-self:flex-start;margin-top:4px;padding:10px 16px;border-radius:12px;background:linear-gradient(90deg,var(--a1),var(--a2));color:#fff;font-weight:700;text-decoration:none}
 .trial{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:18px;padding:12px 14px;margin:-8px 0 18px;box-shadow:var(--shadow)}
 .trial[hidden]{display:none}
 .trial-text{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
@@ -119,6 +124,12 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
 <main>
   <h1>Уникализатор</h1>
   <p class="sub">Делает из одного ролика до 10 уникальных копий</p>
+
+  <div class="inapp" id="inapp" hidden>
+    <b>Откройте приложение в браузере</b>
+    <span id="inappText">Сейчас оно открыто внутри Instagram или Telegram — здесь готовые видео не скачиваются.</span>
+    <a id="inappOpen" href="#">Открыть в Chrome</a>
+  </div>
 
   <div class="trial" id="trial" hidden>
     <div class="trial-text"><b id="trialDays">Пробный период: 3 дня</b><span>до 3 копий из ролика</span></div>
@@ -266,6 +277,22 @@ fitSub();
 addEventListener('resize', fitSub);
 document.fonts?.ready.then(fitSub);
 
+// --- открыто внутри Instagram / Telegram / VK и т. п.? Там файлы не скачиваются ---
+(() => {
+  const ua = navigator.userAgent;
+  const inApp = /Instagram|FBAN|FBAV|FB_IAB|Telegram|VKAndroidApp|VKClient|Line\/|MicroMessenger|; wv\)/i.test(ua);
+  if (!inApp) return;
+  $('inapp').hidden = false;
+  const url = location.href.split('#')[0];
+  if (/Android/i.test(ua)) {
+    // на Android можно сразу открыть эту же страницу в Chrome
+    $('inappOpen').href = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
+  } else {
+    $('inappText').textContent = 'Сейчас оно открыто внутри Instagram или Telegram. Нажмите ⋯ или значок компаса и выберите «Открыть в Safari», затем установите на экран «Домой».';
+    $('inappOpen').hidden = true;
+  }
+})();
+
 // --- подсказка про установку ---
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 if (isIOS && !navigator.standalone) $('install').style.display = 'block';
@@ -294,26 +321,30 @@ async function store(blob, name) {
   return new File([blob], name, { type: 'video/mp4' });
 }
 
-// --- сохранение в Фото / скачивание ---
-// На телефоне (iPhone, Android) — окно «Поделиться» → «Сохранить видео» в галерею.
-// На компьютере — сразу файлом в «Загрузки», без лишних окон.
-const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+// --- сохранение ---
+// iPhone — окно «Поделиться» → «Сохранить видео» (иначе в Фото не попасть).
+// Android и компьютер — сразу файлом в «Загрузки» (на Android видео видно в Галерее).
+const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const canShareFiles = isPhone && (() => {
+const isAndroid = /Android/i.test(navigator.userAgent);
+const canShareFiles = isAppleMobile && (() => {
   try { return !!navigator.canShare && navigator.canShare({ files: [new File([''], 'a.mp4', { type: 'video/mp4' })] }); }
   catch { return false; }
 })();
+// копия файла в памяти — надёжнее, чем ссылка на файл во внутреннем хранилище браузера
+const inMemory = async (f) => new File([await f.arrayBuffer()], f.name, { type: 'video/mp4' });
 async function save(files) {
   if (canShareFiles) {
-    try { await navigator.share({ files }); return; }
+    try { await navigator.share({ files: await Promise.all(files.map(inMemory)) }); return; }
     catch (e) { if (e.name === 'AbortError') return; }
   }
   for (const f of files) {
+    const blob = await inMemory(f);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(f); a.download = f.name;
+    a.href = URL.createObjectURL(blob); a.download = f.name;
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-    await new Promise((r) => setTimeout(r, 400));
+    setTimeout(() => URL.revokeObjectURL(a.href), 120000);
+    await new Promise((r) => setTimeout(r, 700));
   }
 }
 
