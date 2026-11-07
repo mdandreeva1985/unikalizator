@@ -344,7 +344,7 @@ const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
 const isAndroid = /Android/i.test(navigator.userAgent);
 // На iPhone всегда пробуем «Поделиться» (проверка заранее на пустом файле иногда ошибочно говорила «нельзя»)
 const canShareFiles = isAppleMobile && typeof navigator.share === 'function';
-const TO_PHOTOS = 'Видео сохранено в «Файлы» → «Загрузки». Чтобы перенести в Фото: откройте видео там → «Поделиться» → «Сохранить видео».';
+const TO_PHOTOS = 'Видео сохранено в «Файлы»';
 // копия файла в памяти — надёжнее, чем ссылка на файл во внутреннем хранилище браузера
 const inMemory = async (f) => new File([await f.arrayBuffer()], f.name, { type: 'video/mp4' });
 function toast(text, ms = 6000) {
@@ -359,20 +359,19 @@ function save(files, job) {
     try { p = navigator.share({ files }); } catch (e) { p = Promise.reject(e); }
     p.catch((e) => {
       if (e && e.name === 'AbortError') return;          // человек сам закрыл окно
-      const why = ` (причина: ${e && e.name || 'неизвестно'})`;
       console.warn('share:', e);
       if (files.length > 1) {
-        toast('Все сразу не получилось — сохраните копии по одной кнопкой «Сохранить» в списке ниже' + why, 9000);
+        toast('Сохраните по одной — кнопки ниже', 5000);
         job?.ui.files.classList.add('open');
       } else {
         downloadFiles(files);
-        toast(TO_PHOTOS + why, 12000);
+        toast(TO_PHOTOS, 4000);
       }
     });
     return;
   }
   downloadFiles(files);
-  if (isAppleMobile) toast(TO_PHOTOS + ' (причина: нет «Поделиться» в этом браузере)', 12000);
+  if (isAppleMobile) toast(TO_PHOTOS, 4000);
 }
 async function downloadFiles(files) {
   for (const f of files) {
