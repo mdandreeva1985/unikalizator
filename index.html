@@ -42,6 +42,19 @@ h1{margin:4px 0 6px;font-size:40px;line-height:1.1;font-weight:800;letter-spacin
 .quick{display:flex;gap:8px;margin:18px 0}
 .quick button{flex:1 1 0;min-width:0;height:48px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:18px;font-weight:600}
 .quick button.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.opt{display:flex;align-items:center;gap:14px;padding:14px 0 0;border-top:1px solid var(--line)}
+.opt-text{flex:1;min-width:0}
+.opt-text b{display:block;font-size:17px}
+.opt-text span{display:block;color:var(--muted);font-size:14px;line-height:1.35;margin-top:2px}
+.switch{position:relative;flex:none;width:56px;height:34px}
+.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch i{position:absolute;inset:0;border-radius:999px;background:var(--soft);transition:background .2s;cursor:pointer}
+.switch i::after{content:"";position:absolute;top:3px;left:3px;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:transform .2s}
+.switch input:checked + i{background:linear-gradient(90deg,var(--a1),var(--a2))}
+.switch input:checked + i::after{transform:translateX(22px)}
+.seg{display:flex;gap:8px;margin-bottom:20px}
+.seg button{flex:1 1 0;min-width:0;height:46px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:15px;font-weight:600}
+.seg button.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 .pick{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;height:64px;border:0;border-radius:20px;cursor:pointer;
   background:linear-gradient(90deg,var(--a1),var(--a2));color:#fff;font-size:20px;font-weight:700;box-shadow:0 10px 24px rgba(255,110,50,.28)}
 .pick svg{width:24px;height:24px}
@@ -96,6 +109,22 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
       <button id="plus" aria-label="Больше">+</button>
     </div>
     <div class="quick" id="quick"></div>
+
+    <div class="opt">
+      <div class="opt-text">
+        <b>Сильная уникализация</b>
+        <span>Сильнее приближение, цветовой фильтр, скорость ±3–4,5%. Глазу чуть заметно, зато надёжнее.</span>
+      </div>
+      <label class="switch"><input type="checkbox" id="strong" checked><i></i></label>
+    </div>
+
+    <p class="cap" style="margin-top:18px">Рамка</p>
+    <div class="seg" id="frame">
+      <button data-v="none">Без рамки</button>
+      <button data-v="white" class="on">Белая</button>
+      <button data-v="color">Цветная</button>
+    </div>
+
     <label class="pick" for="f">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>
       Выбрать видео
@@ -143,6 +172,19 @@ function setN(v) {
   $('minus').disabled = n <= 1; $('plus').disabled = n >= MAX;
   [...$('quick').children].forEach((b) => b.classList.toggle('on', +b.textContent === n));
 }
+// --- сильная уникализация и рамка (выбор запоминается) ---
+let frame = 'white';
+try {
+  const saved = JSON.parse(localStorage.getItem('uni-opts') || '{}');
+  if (typeof saved.strong === 'boolean') $('strong').checked = saved.strong;
+  if (['none', 'white', 'color'].includes(saved.frame)) frame = saved.frame;
+} catch {}
+const remember = () => { try { localStorage.setItem('uni-opts', JSON.stringify({ strong: $('strong').checked, frame })); } catch {} };
+const paintFrame = () => [...$('frame').children].forEach((b) => b.classList.toggle('on', b.dataset.v === frame));
+[...$('frame').children].forEach((b) => b.onclick = () => { frame = b.dataset.v; paintFrame(); remember(); });
+$('strong').onchange = remember;
+paintFrame();
+
 $('minus').onclick = () => setN(n - 1);
 $('plus').onclick = () => setN(n + 1);
 setN(10);
@@ -212,7 +254,7 @@ async function thumbnail(file, canvas) {
 function addVideo(file) {
   if ($('list').querySelector('.empty')) $('list').innerHTML = '';
   const stem = file.name.replace(/\.[^.]+$/, '').slice(0, 60) || 'ролик';
-  const job = { file, stem, total: n, done: 0, results: [] };
+  const job = { file, stem, total: n, done: 0, results: [], opts: { strong: $('strong').checked, frame } };
   const el = document.createElement('div');
   el.className = 'vid';
   el.innerHTML = `
@@ -261,7 +303,7 @@ async function run() {
     setPill(job, 'work', 'Обработка');
     try {
       for (let i = 1; i <= job.total; i++) {
-        const blob = await makeCopy(job.file, (p) => updateJob(job, p));
+        const blob = await makeCopy(job.file, (p) => updateJob(job, p), job.opts);
         const name = `${job.stem}_копия_${String(i).padStart(2, '0')}.mp4`;
         const f = await store(blob, name);
         job.results.push(f);

@@ -33,21 +33,60 @@ export const SETTINGS = {
   maxWidth: 1080,             // ролики шире (4K) уменьшаются до 1080
 };
 
+// СИЛЬНАЯ УНИКАЛИЗАЦИЯ: заметнее глазу, но кадр «отпечатывается» уже по-другому.
+// Значения ниже заменяют обычные, когда включён переключатель.
+export const STRONG = {
+  zoomPct: [6.0, 9.0],        // приближение сильнее
+  brightness: [-0.04, 0.04],
+  contrast: [0.93, 1.08],
+  saturation: [0.86, 1.16],
+  hueDeg: [-6, 6],
+  tint: [0.03, 0.06],         // тёплый или холодный фильтр, сила
+  noise: [2, 4],
+  speedDelta: [0.03, 0.045],  // скорость ±3–4,5% (вместе со звуком)
+  eqGainDb: [-3, 3],
+  volumeDb: [-1.5, 1.5],
+};
+
+// РАМКИ: толщина в долях ширины кадра (0,015–0,03 = тонкая)
+export const FRAME = {
+  width: [0.015, 0.03],
+  white: [[1, 1, 1]],
+  colors: [
+    [0.07, 0.07, 0.08], [0.96, 0.90, 0.83], [1.0, 0.84, 0.88],
+    [0.84, 0.92, 0.97], [0.91, 0.96, 0.91], [1.0, 0.95, 0.77], [0.93, 0.87, 1.0],
+  ],
+};
+
 const rnd = ([a, b]) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const even = (x) => Math.max(2, Math.round(x / 2) * 2);
 
-export function makeParams() {
-  return {
-    zoomPct: rnd(SETTINGS.zoomPct), cropX: Math.random(), cropY: Math.random(),
-    brightness: rnd(SETTINGS.brightness), contrast: rnd(SETTINGS.contrast),
-    saturation: rnd(SETTINGS.saturation), gamma: rnd(SETTINGS.gamma),
-    hueDeg: rnd(SETTINGS.hueDeg), noise: rnd(SETTINGS.noise),
-    speed: rnd(SETTINGS.speed), volumeDb: rnd(SETTINGS.volumeDb),
-    eqGainDb: rnd(SETTINGS.eqGainDb), eqFreq: rnd(SETTINGS.eqFreq),
-    trimStart: rnd(SETTINGS.trimStart), trimEnd: rnd(SETTINGS.trimEnd),
-    bitrateVsSource: rnd(SETTINGS.bitrateVsSource), keyFrameSec: rnd(SETTINGS.keyFrameSec),
-    audioBitrate: SETTINGS.audioBitrates[Math.floor(Math.random() * SETTINGS.audioBitrates.length)],
+// opts.strong — сильная уникализация; opts.frame — 'none' | 'white' | 'color'
+export function makeParams(opts = {}) {
+  const S = opts.strong ? { ...SETTINGS, ...STRONG } : SETTINGS;
+  const p = {
+    zoomPct: rnd(S.zoomPct), cropX: Math.random(), cropY: Math.random(),
+    brightness: rnd(S.brightness), contrast: rnd(S.contrast),
+    saturation: rnd(S.saturation), gamma: rnd(S.gamma),
+    hueDeg: rnd(S.hueDeg), noise: rnd(S.noise),
+    speed: rnd(S.speed), volumeDb: rnd(S.volumeDb),
+    eqGainDb: rnd(S.eqGainDb), eqFreq: rnd(S.eqFreq),
+    trimStart: rnd(S.trimStart), trimEnd: rnd(S.trimEnd),
+    bitrateVsSource: rnd(S.bitrateVsSource), keyFrameSec: rnd(S.keyFrameSec),
+    audioBitrate: pick(S.audioBitrates),
+    tint: [1, 1, 1], frameWidth: 0, frameColor: [1, 1, 1],
   };
+  if (opts.strong) {
+    p.speed = 1 + (Math.random() < 0.5 ? -1 : 1) * rnd(STRONG.speedDelta);
+    const t = rnd(STRONG.tint);
+    p.tint = Math.random() < 0.5 ? [1 + t, 1 + t * 0.3, 1 - t] : [1 - t, 1 + t * 0.1, 1 + t]; // тёплый / холодный
+  }
+  if (opts.frame === 'white' || opts.frame === 'color') {
+    p.frameWidth = rnd(FRAME.width);
+    p.frameColor = pick(opts.frame === 'white' ? FRAME.white : FRAME.colors);
+  }
+  return p;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,8 +96,12 @@ const VS = `attribute vec2 p; varying vec2 uv;
 void main(){ uv = vec2((p.x+1.0)*0.5, 1.0-(p.y+1.0)*0.5); gl_Position = vec4(p,0.0,1.0); }`;
 const FS = `precision highp float; varying vec2 uv; uniform sampler2D t;
 uniform float br, ct, sat, gam, hue, noise, seed;
+uniform vec3 tint, bcol; uniform vec2 bw;
 void main(){
-  vec3 c = texture2D(t, uv).rgb;
+  vec2 q = (uv - bw) / (1.0 - 2.0 * bw);
+  if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) { gl_FragColor = vec4(bcol, 1.0); return; }
+  vec3 c = texture2D(t, q).rgb;
+  c *= tint;
   c = pow(max(c, 0.0), vec3(1.0/gam));
   c = (c - 0.5) * ct + 0.5 + br;
   float l = dot(c, vec3(0.299, 0.587, 0.114));
@@ -100,13 +143,18 @@ function makeRenderer(w, h) {
     [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
   gl.viewport(0, 0, w, h);
   const u = (n) => gl.getUniformLocation(prog, n);
-  const U = { br: u('br'), ct: u('ct'), sat: u('sat'), gam: u('gam'), hue: u('hue'), noise: u('noise'), seed: u('seed') };
+  const U = { br: u('br'), ct: u('ct'), sat: u('sat'), gam: u('gam'), hue: u('hue'), noise: u('noise'), seed: u('seed'),
+    tint: u('tint'), bcol: u('bcol'), bw: u('bw') };
   return {
     canvas,
     setParams(p) {
       gl.uniform1f(U.br, p.brightness); gl.uniform1f(U.ct, p.contrast);
       gl.uniform1f(U.sat, p.saturation); gl.uniform1f(U.gam, p.gamma);
       gl.uniform1f(U.hue, p.hueDeg * Math.PI / 180); gl.uniform1f(U.noise, p.noise / 255);
+      gl.uniform3fv(U.tint, p.tint || [1, 1, 1]);
+      gl.uniform3fv(U.bcol, p.frameColor || [1, 1, 1]);
+      const fw = p.frameWidth || 0;              // одинаковая толщина в пикселях по всем сторонам
+      gl.uniform2f(U.bw, fw, fw * w / h);
     },
     draw(src) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, src);
@@ -170,7 +218,8 @@ async function ensureAac() {
 // ---------------------------------------------------------------------------
 // Одна копия
 // ---------------------------------------------------------------------------
-export async function makeCopy(file, onProgress = () => {}, p = makeParams()) {
+export async function makeCopy(file, onProgress = () => {}, opts = {}) {
+  const p = makeParams(opts);
   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
   try {
     const vTrack = await input.getPrimaryVideoTrack();
