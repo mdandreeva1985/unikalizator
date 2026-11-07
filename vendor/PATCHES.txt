@@ -1,0 +1,2 @@
+Uniqualizer note: in mediabunny.min.mjs the library's own name was removed from the
+written files (encoder tag and track handler names), so copies carry no tool signature.

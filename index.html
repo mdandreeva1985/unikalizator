@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Уникализатор</title>
+<meta name="description" content="Делает технически разные копии ролика прямо на телефоне">
+<meta name="theme-color" content="#d2462f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Уникализатор">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<script type="importmap">{ "imports": { "mediabunny": "./vendor/mediabunny.min.mjs" } }</script>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--ink:#1d1b18;--muted:#6b665d;--accent:#d2462f;--ok:#2f8a4c;--line:#e5e0d6;--warn:#fff4e5}
+@media (prefers-color-scheme:dark){:root{--bg:#161513;--card:#22201d;--ink:#f1ede6;--muted:#a39d92;--line:#36332e;--warn:#3a2e1c}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+main{max-width:520px;margin:0 auto;padding:max(20px,env(safe-area-inset-top)) 16px 60px}
+h1{font-size:28px;margin:6px 0 4px}
+p.sub{color:var(--muted);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
+.lbl{display:block;font-weight:600;margin:0 0 10px}
+.file{display:block;border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);cursor:pointer}
+.file.has{border-color:var(--ok);color:var(--ink)}
+input[type=file]{display:none}
+.count{display:flex;gap:6px}
+.count button{flex:1 1 0;min-width:0;padding:12px 0;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:16px}
+.count button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.go{width:100%;padding:16px;border:0;border-radius:14px;background:var(--accent);color:#fff;font-size:18px;font-weight:700}
+.go:disabled{opacity:.5}
+.bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:10px 0}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.muted{color:var(--muted);font-size:14px}
+.item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item button,.item a{flex:none;padding:8px 14px;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-weight:600;font-size:15px;text-decoration:none}
+.all{display:block;width:100%;margin-top:14px;padding:14px;border-radius:12px;border:0;background:var(--ink);color:var(--bg);font-weight:700;font-size:16px}
+.note{background:var(--warn);border-radius:12px;padding:12px 14px;font-size:14px;margin-bottom:14px}
+.install{display:none}
+footer{color:var(--muted);font-size:13px;text-align:center;margin-top:24px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Уникализатор</h1>
+  <p class="sub">Делает технически разные копии ролика. Всё происходит на вашем устройстве, ролики никуда не отправляются.</p>
+
+  <div class="note install" id="install">
+    <b>Установите на экран «Домой»:</b> нажмите «Поделиться» <span aria-hidden="true">⎋</span> внизу Safari и выберите «На экран “Домой”». После этого приложение работает даже без интернета.
+  </div>
+
+  <div class="card">
+    <span class="lbl">1. Ролик</span>
+    <label class="file" id="fl" for="f">Нажмите, чтобы выбрать видео</label>
+    <input type="file" id="f" accept="video/*">
+  </div>
+
+  <div class="card">
+    <span class="lbl">2. Сколько копий</span>
+    <div class="count" id="cnt"></div>
+  </div>
+
+  <button class="go" id="go" disabled>Сделать копии</button>
+
+  <div class="card" id="st" style="display:none;margin-top:14px">
+    <div id="stt"></div>
+    <div class="bar"><i id="pb"></i></div>
+    <div class="muted" id="stm">Не закрывайте приложение и не блокируйте экран, пока идёт работа.</div>
+    <div id="list"></div>
+    <div id="allbox"></div>
+  </div>
+
+  <footer>Без зеркала · метаданные удаляются · обрезка только долей секунды в начале и в конце</footer>
+</main>
+
+<script type="module">
+import { makeCopy } from './app.js';
+
+const $ = (id) => document.getElementById(id);
+let n = 10, file = null, results = [];
+
+// кнопки количества
+[1, 3, 5, 10, 15, 20].forEach((v) => {
+  const b = document.createElement('button');
+  b.textContent = v;
+  if (v === n) b.classList.add('on');
+  b.onclick = () => { n = v; [...$('cnt').children].forEach((x) => x.classList.toggle('on', x === b)); };
+  $('cnt').appendChild(b);
+});
+
+// подсказка про установку на iPhone (если открыто в Safari, а не с экрана «Домой»)
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+if (isIOS && !navigator.standalone) $('install').style.display = 'block';
+
+$('f').onchange = () => {
+  file = $('f').files[0];
+  if (file) {
+    $('fl').textContent = '✔ ' + file.name + ' (' + (file.size / 1048576).toFixed(1) + ' МБ)';
+    $('fl').classList.add('has');
+    $('go').disabled = false;
+  }
+};
+
+const canShareFiles = (() => {
+  try { return !!navigator.canShare && navigator.canShare({ files: [new File([''], 'a.mp4', { type: 'video/mp4' })] }); }
+  catch { return false; }
+})();
+
+async function save(files) {
+  if (canShareFiles) {
+    try { await navigator.share({ files }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  for (const f of files) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(f); a.download = f.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+const saveLabel = canShareFiles ? 'Сохранить' : 'Скачать';
+
+function addItem(f) {
+  const row = document.createElement('div');
+  row.className = 'item';
+  const name = document.createElement('span');
+  name.textContent = f.name;
+  const btn = document.createElement('button');
+  btn.textContent = saveLabel;
+  btn.onclick = () => save([f]);
+  row.append(name, btn);
+  $('list').appendChild(row);
+}
+
+$('go').onclick = async () => {
+  if (!file) return;
+  $('go').disabled = true;
+  $('st').style.display = 'block';
+  $('list').innerHTML = ''; $('allbox').innerHTML = '';
+  results = [];
+  let lock = null;
+  try { lock = await navigator.wakeLock?.request('screen'); } catch {}
+  const stem = file.name.replace(/\.[^.]+$/, '').slice(0, 60) || 'ролик';
+  const started = performance.now();
+  try {
+    for (let i = 1; i <= n; i++) {
+      $('stt').textContent = `Делаю копию ${i} из ${n}…`;
+      const blob = await makeCopy(file, (p) => { $('pb').style.width = (((i - 1) + p) / n * 100) + '%'; });
+      const f = new File([blob], `${stem}_копия_${String(i).padStart(2, '0')}.mp4`, { type: 'video/mp4' });
+      results.push(f);
+      addItem(f);
+      const per = (performance.now() - started) / i / 1000;
+      $('stm').textContent = `≈ ${Math.round(per)} сек на копию. Не блокируйте экран, пока идёт работа.`;
+    }
+    $('pb').style.width = '100%';
+    $('stt').textContent = `Готово: ${n} ${n === 1 ? 'копия' : n < 5 ? 'копии' : 'копий'}`;
+    $('stm').textContent = canShareFiles ? 'Нажмите «Сохранить» и выберите «Сохранить видео», копии появятся в Фото.' : '';
+    if (results.length > 1) {
+      const all = document.createElement('button');
+      all.className = 'all';
+      all.textContent = canShareFiles ? `Сохранить все ${results.length} в Фото` : `Скачать все ${results.length}`;
+      all.onclick = () => save(results);
+      $('allbox').appendChild(all);
+    }
+  } catch (e) {
+    console.error(e);
+    $('stt').textContent = 'Ошибка: ' + (e.message || e);
+  } finally {
+    lock?.release?.().catch(() => {});
+    $('go').disabled = false;
+  }
+};
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+window.__makeCopy = makeCopy; // для автотестов
+</script>
+</body>
+</html>
