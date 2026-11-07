@@ -74,13 +74,15 @@ h2{font-size:28px;margin:0 0 14px;font-weight:800;letter-spacing:-.3px}
 .files button{flex:none;border:0;background:none;color:var(--a1);font-weight:700;font-size:14px}
 .install{display:none;background:var(--card);border-radius:18px;padding:14px 16px;font-size:15px;margin-bottom:18px;box-shadow:var(--shadow)}
 .warn{display:none;background:var(--workbg);border-radius:14px;padding:12px 14px;font-size:14px;margin:-12px 0 18px}
-footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
+footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.tg{display:inline-flex;align-items:center;gap:8px;padding:8px 16px 8px 8px;border-radius:999px;background:var(--card);box-shadow:var(--shadow);color:var(--ink);text-decoration:none;font-weight:600}
+.tg svg{width:28px;height:28px}
 </style>
 </head>
 <body>
 <main>
   <h1>Уникализатор</h1>
-  <p class="sub">Видео с телефона — копии, которые не склеятся с оригиналом</p>
+  <p class="sub">Делает из одного ролика до 10 уникальных копий для перезалива</p>
 
   <div class="install" id="install">
     <b>Установите на экран «Домой»:</b> нажмите «Поделиться» внизу Safari, затем «На экран “Домой”». После этого приложение работает даже без интернета.
@@ -106,7 +108,13 @@ footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
   <div class="warn" id="warn">Пока идёт работа, не блокируйте экран и не сворачивайте приложение.</div>
   <div id="list"><p class="empty">Здесь появятся ваши ролики и их копии</p></div>
 
-  <footer>Всё делается на вашем телефоне, видео никуда не отправляется.<br>Без зеркала · метаданные удаляются · середина ролика не трогается</footer>
+  <footer>
+    <span>Разработчик приложения — Мария Андреева</span>
+    <a class="tg" href="https://t.me/+79923349020" target="_blank" rel="noopener" aria-label="Написать в Telegram">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path fill="#fff" d="M5.4 11.8l11.6-4.5c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1 .5l-3-2.2-1.4 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.3-.1l-7 4.4-3-.9c-.6-.2-.7-.6.1-.9z"/></svg>
+      Telegram
+    </a>
+  </footer>
 </main>
 
 <script type="module">
