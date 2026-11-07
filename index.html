@@ -342,10 +342,9 @@ async function store(blob, name) {
 const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isAndroid = /Android/i.test(navigator.userAgent);
-const canShareFiles = isAppleMobile && (() => {
-  try { return !!navigator.canShare && navigator.canShare({ files: [new File([''], 'a.mp4', { type: 'video/mp4' })] }); }
-  catch { return false; }
-})();
+// На iPhone всегда пробуем «Поделиться» (проверка заранее на пустом файле иногда ошибочно говорила «нельзя»)
+const canShareFiles = isAppleMobile && typeof navigator.share === 'function';
+const TO_PHOTOS = 'Видео сохранено в «Файлы» → «Загрузки». Чтобы перенести в Фото: откройте видео там → «Поделиться» → «Сохранить видео».';
 // копия файла в памяти — надёжнее, чем ссылка на файл во внутреннем хранилище браузера
 const inMemory = async (f) => new File([await f.arrayBuffer()], f.name, { type: 'video/mp4' });
 function toast(text, ms = 6000) {
@@ -356,28 +355,24 @@ function toast(text, ms = 6000) {
 // iPhone разрешает открыть «Поделиться» только сразу после нажатия — поэтому без задержек перед share
 function save(files, job) {
   if (canShareFiles) {
-    const data = { files };
-    if (!navigator.canShare || navigator.canShare(data)) {
-      navigator.share(data).catch((e) => {
-        if (e.name === 'AbortError') return;
-        console.warn('share:', e);
-        if (files.length > 1) {
-          toast('Все сразу не получилось — сохраните копии по одной кнопкой «Сохранить» в списке ниже');
-          job?.ui.files.classList.add('open');
-        } else {
-          downloadFiles(files);
-          toast('Видео сохраняется в «Файлы» → «Загрузки». Оттуда его можно сохранить в Фото');
-        }
-      });
-      return;
-    }
-    if (files.length > 1) {   // слишком много или слишком большие файлы для одного окна «Поделиться»
-      toast('Сохраните копии по одной — кнопка «Сохранить» у каждой копии в списке ниже');
-      job?.ui.files.classList.add('open');
-      return;
-    }
+    let p;
+    try { p = navigator.share({ files }); } catch (e) { p = Promise.reject(e); }
+    p.catch((e) => {
+      if (e && e.name === 'AbortError') return;          // человек сам закрыл окно
+      const why = ` (причина: ${e && e.name || 'неизвестно'})`;
+      console.warn('share:', e);
+      if (files.length > 1) {
+        toast('Все сразу не получилось — сохраните копии по одной кнопкой «Сохранить» в списке ниже' + why, 9000);
+        job?.ui.files.classList.add('open');
+      } else {
+        downloadFiles(files);
+        toast(TO_PHOTOS + why, 12000);
+      }
+    });
+    return;
   }
   downloadFiles(files);
+  if (isAppleMobile) toast(TO_PHOTOS + ' (причина: нет «Поделиться» в этом браузере)', 12000);
 }
 async function downloadFiles(files) {
   for (const f of files) {
