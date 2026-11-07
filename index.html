@@ -87,7 +87,18 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
 .gate-card input:focus{outline:none;border-color:var(--a1)}
 .gate-err{color:var(--err);font-size:14px}
 .gate-err[hidden]{display:none}
-.gate-buy{color:var(--muted);font-size:15px}
+.gate-buy{color:var(--muted);font-size:15px;background:none;border:0;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.gate-buy[hidden]{display:none}
+.gate-buy-btn{display:flex;align-items:center;justify-content:center;height:56px;border-radius:18px;background:var(--ink);color:var(--bg);font-weight:700;font-size:17px;text-decoration:none}
+.trial{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:18px;padding:12px 14px;margin:-8px 0 18px;box-shadow:var(--shadow)}
+.trial[hidden]{display:none}
+.trial-text{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.trial-text b{font-size:15px}
+.trial-text span{font-size:13px;color:var(--muted)}
+.trial button,.trial a{flex:none;height:38px;padding:0 12px;border-radius:12px;font-weight:700;font-size:14px;display:inline-flex;align-items:center;text-decoration:none;border:0;cursor:pointer}
+.trial button{background:var(--soft);color:var(--ink)}
+.trial a{background:linear-gradient(90deg,var(--a1),var(--a2));color:#fff}
+.quick button.locked,.stepper button.locked-plus{opacity:.45}
 .contact{display:inline-flex;align-items:center;gap:6px}
 .contact svg{width:16px;height:16px}
 .contact a{color:#2AABEE;font-weight:600;text-decoration:none}
@@ -97,16 +108,23 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
 <div id="gate" class="gate" hidden>
   <form class="gate-card" id="gateForm" autocomplete="off">
     <span class="gate-t">Уникализатор</span>
-    <p>Введите код доступа, который вы получили после покупки</p>
+    <p id="gateText">Введите код доступа, который вы получили после покупки</p>
     <input id="code" inputmode="text" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX" maxlength="16" aria-label="Код доступа">
     <span class="gate-err" id="gateErr" hidden>Такого кода нет. Проверьте буквы и цифры и попробуйте ещё раз.</span>
     <button class="pick" type="submit">Войти</button>
-    <a class="gate-buy" href="https://mdandreeva1985.github.io/unikalizator-site/" target="_blank" rel="noopener">Нет кода? Купить доступ</a>
+    <a class="gate-buy-btn" href="https://t.me/m/KYb3AI8bOTgy" target="_blank" rel="noopener">Купить доступ за 990 ₽</a>
+    <button type="button" class="gate-buy" id="gateClose" hidden>Продолжить пробный период</button>
   </form>
 </div>
 <main>
   <h1>Уникализатор</h1>
   <p class="sub">Делает из одного ролика до 10 уникальных копий</p>
+
+  <div class="trial" id="trial" hidden>
+    <div class="trial-text"><b id="trialDays">Пробный период: 3 дня</b><span>до 3 копий из ролика</span></div>
+    <button type="button" id="trialCode">Ввести код</button>
+    <a href="https://t.me/m/KYb3AI8bOTgy" target="_blank" rel="noopener">Купить</a>
+  </div>
 
   <div class="install" id="install">
     <b>Установите на экран «Домой»:</b> нажмите «Поделиться» внизу Safari, затем «На экран “Домой”». После этого приложение работает даже без интернета.
@@ -153,11 +171,33 @@ async function codeHash(code) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
 }
 const KEY = 'uni-access';
-let saved = null;
-try { saved = localStorage.getItem(KEY); } catch {}
-if (!saved || !CODES.has(saved)) {
+// --- пробный период: 3 дня с первого открытия, до 3 копий из ролика ---
+const TRIAL_DAYS = 3, TRIAL_COPIES = 3, TRIAL_KEY = 'uni-trial-start';
+let saved = null, trialStart = Date.now();
+try {
+  saved = localStorage.getItem(KEY);
+  const t = +localStorage.getItem(TRIAL_KEY);
+  if (t > 0 && t <= Date.now()) trialStart = t; else localStorage.setItem(TRIAL_KEY, String(trialStart));
+} catch {}
+const paid = !!saved && CODES.has(saved);
+const msLeft = trialStart + TRIAL_DAYS * 864e5 - Date.now();
+const inTrial = !paid && msLeft > 0;
+const daysLeft = Math.max(1, Math.ceil(msLeft / 864e5));
+const daysWord = (d) => d === 1 ? 'день' : d < 5 ? 'дня' : 'дней';
+
+function openGate(text, closable) {
+  document.getElementById('gateText').textContent = text;
+  document.getElementById('gateClose').hidden = !closable;
   document.getElementById('gate').hidden = false;
   setTimeout(() => document.getElementById('code').focus(), 100);
+}
+document.getElementById('gateClose').onclick = () => { document.getElementById('gate').hidden = true; };
+if (inTrial) {
+  document.getElementById('trial').hidden = false;
+  document.getElementById('trialDays').textContent = `Бесплатно ещё ${daysLeft} ${daysWord(daysLeft)}`;
+  document.getElementById('trialCode').onclick = () => openGate('Введите код доступа, который вы получили после покупки', true);
+} else if (!paid) {
+  openGate('Пробный период закончился. Чтобы продолжить, купите доступ и введите код', false);
 }
 const codeInput = document.getElementById('code');
 codeInput.addEventListener('input', () => {   // автоматически ставим дефисы: XXXX-XXXX-XXXX
@@ -172,15 +212,16 @@ document.getElementById('gateForm').addEventListener('submit', async (e) => {
     try { localStorage.setItem(KEY, h); } catch {}
     try { await navigator.storage?.persist?.(); } catch {}
     document.getElementById('gate').hidden = true;
+    if (!paid) location.reload();   // снимаем ограничения пробного периода
   } else {
     document.getElementById('gateErr').hidden = false;
   }
 });
 import { Input, ALL_FORMATS, BlobSource, CanvasSink } from 'mediabunny';
 
-const MAX = 10;
+const MAX = paid ? 10 : TRIAL_COPIES;
 const $ = (id) => document.getElementById(id);
-let n = 10;
+let n = MAX;
 const queue = [];
 let running = false, wakeLock = null;
 
@@ -190,19 +231,29 @@ const QUICK = [1, 3, 5, 10];
 QUICK.forEach((v) => {
   const b = document.createElement('button');
   b.textContent = v;
-  b.onclick = () => setN(v);
+  if (v > MAX) {
+    // в пробном периоде 5 и 10 копий — только после покупки
+    b.classList.add('locked');
+    b.onclick = () => openGate(`В пробном периоде — до ${TRIAL_COPIES} копий из ролика. ${v} копий доступны после покупки`, true);
+  } else {
+    b.onclick = () => setN(v);
+  }
   $('quick').appendChild(b);
 });
 function setN(v) {
   n = Math.max(1, Math.min(MAX, v));
   $('n').textContent = n;
   $('nlabel').textContent = `${word(n)} на видео`;
-  $('minus').disabled = n <= 1; $('plus').disabled = n >= MAX;
+  $('minus').disabled = n <= 1; $('plus').disabled = paid && n >= MAX;
+  $('plus').classList.toggle('locked-plus', !paid && n >= MAX);
   [...$('quick').children].forEach((b) => b.classList.toggle('on', +b.textContent === n));
 }
 $('minus').onclick = () => setN(n - 1);
-$('plus').onclick = () => setN(n + 1);
-setN(10);
+$('plus').onclick = () => {
+  if (n >= MAX && !paid) openGate(`В пробном периоде — до ${TRIAL_COPIES} копий из ролика. До 10 копий — после покупки`, true);
+  else setN(n + 1);
+};
+setN(MAX);
 
 // подзаголовок всегда в одну строку: уменьшаем шрифт, если не помещается
 function fitSub() {
