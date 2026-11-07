@@ -1,8 +1,8 @@
 // Сохраняет приложение на устройстве, чтобы оно работало без интернета.
 // При обновлении приложения увеличьте номер версии.
-const VERSION = 'uni-v10';
+const VERSION = 'uni-v11';
 const FILES = [
-  './', './index.html', './app.js', './manifest.webmanifest',
+  './', './index.html', './app.js', './codes.js', './manifest.webmanifest',
   './vendor/mediabunny.min.mjs', './vendor/mediabunny-aac-encoder.min.mjs',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
 ];

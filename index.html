@@ -77,12 +77,32 @@ h2{font-size:28px;margin:0 0 14px;font-weight:800;letter-spacing:-.3px}
 .install{display:none;background:var(--card);border-radius:18px;padding:14px 16px;font-size:15px;margin-bottom:18px;box-shadow:var(--shadow)}
 .warn{display:none;background:var(--workbg);border-radius:14px;padding:12px 14px;font-size:14px;margin:-12px 0 18px}
 footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.gate{position:fixed;inset:0;z-index:50;background:var(--bg);display:grid;place-items:center;padding:24px max(18px,env(safe-area-inset-left))}
+.gate[hidden]{display:none}
+.gate-card{width:min(420px,100%);background:var(--card);border-radius:26px;padding:28px 22px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px;text-align:center}
+.gate-t{font-size:32px;font-weight:800;background:linear-gradient(90deg,var(--a1),var(--a2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.gate-card p{margin:0;color:var(--muted)}
+.gate-card input{height:58px;border-radius:16px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);font:700 22px ui-monospace,Menlo,Consolas,monospace;text-align:center;letter-spacing:2px;text-transform:uppercase}
+.gate-card input:focus{outline:none;border-color:var(--a1)}
+.gate-err{color:var(--err);font-size:14px}
+.gate-err[hidden]{display:none}
+.gate-buy{color:var(--muted);font-size:15px}
 .contact{display:inline-flex;align-items:center;gap:6px}
 .contact svg{width:16px;height:16px}
 .contact a{color:#2AABEE;font-weight:600;text-decoration:none}
 </style>
 </head>
 <body>
+<div id="gate" class="gate" hidden>
+  <form class="gate-card" id="gateForm" autocomplete="off">
+    <span class="gate-t">Уникализатор</span>
+    <p>Введите код доступа, который вы получили после покупки</p>
+    <input id="code" inputmode="text" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX" maxlength="16" aria-label="Код доступа">
+    <span class="gate-err" id="gateErr" hidden>Такого кода нет. Проверьте буквы и цифры и попробуйте ещё раз.</span>
+    <button class="pick" type="submit">Войти</button>
+    <a class="gate-buy" href="https://mdandreeva1985.github.io/unikalizator-site/" target="_blank" rel="noopener">Нет кода? Купить доступ</a>
+  </form>
+</div>
 <main>
   <h1>Уникализатор</h1>
   <p class="sub">Делает из одного ролика до 10 уникальных копий</p>
@@ -123,6 +143,38 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
 
 <script type="module">
 import { makeCopy, planFrames } from './app.js';
+import { SALT, CODES } from './codes.js';
+
+// --- код доступа: вводится один раз на устройстве, дальше работает без интернета ---
+async function codeHash(code) {
+  const norm = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SALT + norm));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+}
+const KEY = 'uni-access';
+let saved = null;
+try { saved = localStorage.getItem(KEY); } catch {}
+if (!saved || !CODES.has(saved)) {
+  document.getElementById('gate').hidden = false;
+  setTimeout(() => document.getElementById('code').focus(), 100);
+}
+const codeInput = document.getElementById('code');
+codeInput.addEventListener('input', () => {   // автоматически ставим дефисы: XXXX-XXXX-XXXX
+  const v = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  codeInput.value = v.match(/.{1,4}/g)?.join('-') || '';
+  document.getElementById('gateErr').hidden = true;
+});
+document.getElementById('gateForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const h = await codeHash(codeInput.value);
+  if (CODES.has(h)) {
+    try { localStorage.setItem(KEY, h); } catch {}
+    try { await navigator.storage?.persist?.(); } catch {}
+    document.getElementById('gate').hidden = true;
+  } else {
+    document.getElementById('gateErr').hidden = false;
+  }
+});
 import { Input, ALL_FORMATS, BlobSource, CanvasSink } from 'mediabunny';
 
 const MAX = 10;
