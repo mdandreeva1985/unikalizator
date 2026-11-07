@@ -23,7 +23,12 @@ export const SETTINGS = {
   eqFreq: [300, 4000],
   trimStart: [0.05, 0.30],    // обрезка начала, сек
   trimEnd: [0.05, 0.30],      // обрезка конца, сек
-  bitrate: [8e6, 11e6],       // качество видео, бит/с
+  // Качество видео подбирается под исходник: в 2–2,5 раза выше исходного,
+  // но в пределах разумного для такого размера кадра (для 1080×1920 от 2,5 до 10 Мбит/с).
+  bitrateVsSource: [2.0, 2.5],
+  bitrateFloor1080: 2.5e6,
+  bitrateCap1080: 10e6,
+  audioBitrates: [128000, 160000],
   keyFrameSec: [1.5, 2.5],
   maxWidth: 1080,             // ролики шире (4K) уменьшаются до 1080
 };
@@ -40,7 +45,8 @@ export function makeParams() {
     speed: rnd(SETTINGS.speed), volumeDb: rnd(SETTINGS.volumeDb),
     eqGainDb: rnd(SETTINGS.eqGainDb), eqFreq: rnd(SETTINGS.eqFreq),
     trimStart: rnd(SETTINGS.trimStart), trimEnd: rnd(SETTINGS.trimEnd),
-    bitrate: Math.round(rnd(SETTINGS.bitrate)), keyFrameSec: rnd(SETTINGS.keyFrameSec),
+    bitrateVsSource: rnd(SETTINGS.bitrateVsSource), keyFrameSec: rnd(SETTINGS.keyFrameSec),
+    audioBitrate: SETTINGS.audioBitrates[Math.floor(Math.random() * SETTINGS.audioBitrates.length)],
   };
 }
 
@@ -183,6 +189,20 @@ export async function makeCopy(file, onProgress = () => {}, p = makeParams()) {
     const cw = Math.round(dw * k), ch = Math.round(dh * k);
     const crop = { left: Math.round((dw - cw) * p.cropX), top: Math.round((dh - ch) * p.cropY), width: cw, height: ch };
 
+    // качество — под исходник, частота кадров — ровная, как у обычной записи
+    let srcBitrate = 0, srcFps = 30;
+    try {
+      const st = await vTrack.computePacketStats(300);
+      srcBitrate = st.averageBitrate || 0;
+      srcFps = st.averagePacketRate || 30;
+    } catch {}
+    if (!srcBitrate) srcBitrate = (file.size * 8) / Math.max(1, duration);
+    const fps = [24, 25, 30, 50, 60].reduce((a, b) => (Math.abs(b - srcFps) < Math.abs(a - srcFps) ? b : a));
+    const area = (W * H) / (1080 * 1920);
+    p.bitrate = Math.round(Math.min(SETTINGS.bitrateCap1080 * area,
+      Math.max(SETTINGS.bitrateFloor1080 * area, srcBitrate * p.bitrateVsSource)));
+    p.fps = fps;
+
     if (!(await canEncodeVideo('avc', { width: W, height: H, bitrate: p.bitrate }))) {
       throw new Error('Это устройство не умеет кодировать H.264 видео такого размера');
     }
@@ -200,7 +220,7 @@ export async function makeCopy(file, onProgress = () => {}, p = makeParams()) {
       await ensureAac();
       audio = await processAudio(aTrack, t0, t1, p);
       if (audio) {
-        aSource = new AudioBufferSource({ codec: 'aac', bitrate: 192000 });
+        aSource = new AudioBufferSource({ codec: 'aac', bitrate: p.audioBitrate });
         output.addAudioTrack(aSource);
       }
     }
@@ -211,16 +231,19 @@ export async function makeCopy(file, onProgress = () => {}, p = makeParams()) {
     if (aSource) { await aSource.add(audio); aSource.close(); }
 
     const sink = new CanvasSink(vTrack, { width: W, height: H, fit: 'fill', crop, poolSize: 2 });
-    let last = -1;
-    for await (const wc of sink.canvases(t0, t1)) {
-      // время кадра считаем от точки обрезки, чтобы звук и губы совпадали
-      const ts = Math.max(0, (wc.timestamp - t0) / p.speed);
-      const end = (wc.timestamp + wc.duration - t0) / p.speed;
-      if (ts <= last) continue;
-      last = ts;
-      renderer.draw(wc.canvas);
-      await vSource.add(ts, Math.max(0.001, end - ts));
-      onProgress(Math.min(1, (wc.timestamp - t0) / (t1 - t0)));
+    // Ровная сетка кадров (например, ровно 30 в секунду): для каждого кадра копии
+    // берём кадр исходника в соответствующий момент с учётом скорости.
+    const outDur = (t1 - t0) / p.speed;
+    const frameCount = Math.max(1, Math.floor(outDur * fps));
+    function* times() {
+      for (let j = 0; j < frameCount; j++) yield Math.min(t1 - 0.001, t0 + (j / fps) * p.speed);
+    }
+    let fi = 0;
+    for await (const wc of sink.canvasesAtTimestamps(times())) {
+      if (wc) renderer.draw(wc.canvas);   // если кадра нет — повторяем предыдущий
+      await vSource.add(fi / fps, 1 / fps);
+      fi++;
+      if (fi % 10 === 0) onProgress(fi / frameCount);
     }
     vSource.close();
     await output.finalize();
