@@ -1,10 +1,10 @@
 // Сохраняет приложение на устройстве, чтобы оно работало без интернета.
 // При обновлении приложения увеличьте номер версии.
-const VERSION = 'uni-v13';
+const VERSION = 'uni-v14';
 const FILES = [
   './', './index.html', './app.js', './codes.js', './manifest.webmanifest',
   './vendor/mediabunny.min.mjs', './vendor/mediabunny-aac-encoder.min.mjs',
-  './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
+  './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/maskable-192.png', './icons/maskable-512.png',
 ];
 
 self.addEventListener('install', (e) => {
