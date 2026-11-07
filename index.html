@@ -210,17 +210,20 @@ async function save(files) {
 }
 
 // --- превью ---
-async function thumbnail(file, canvas) {
+async function thumbnail(file, canvas, attempt = 1) {
   try {
     const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
     const track = await input.getPrimaryVideoTrack();
     const dur = await input.computeDuration();
     const w = 152, h = Math.round(152 * track.displayHeight / track.displayWidth);
     const wc = await new CanvasSink(track, { width: w, height: h, fit: 'fill' }).getCanvas(Math.min(0.6, dur / 2));
-    canvas.width = w; canvas.height = h;
-    if (wc) canvas.getContext('2d').drawImage(wc.canvas, 0, 0);
     input.dispose?.();
-  } catch {}
+    if (!wc) throw new Error('нет кадра');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(wc.canvas, 0, 0);
+  } catch {
+    if (attempt < 3) setTimeout(() => thumbnail(file, canvas, attempt + 1), 1500 * attempt);
+  }
 }
 
 // --- карточка видео ---
@@ -293,7 +296,22 @@ async function run() {
     setPill(job, 'work', 'Обработка');
     try {
       for (let i = 1; i <= job.total; i++) {
-        const blob = await makeCopy(job.file, (p) => updateJob(job, p), { frame: job.frames[i - 1], signal: job.ctrl.signal });
+        // Если видеокарта дала сбой, повторяем копию через программный кодировщик (до 3 попыток).
+        let blob = null, lastErr = null;
+        for (let attempt = 1; attempt <= 3 && !blob; attempt++) {
+          try {
+            blob = await makeCopy(job.file, (p) => updateJob(job, p),
+              { frame: job.frames[i - 1], signal: job.ctrl.signal, software: job.software });
+          } catch (e) {
+            if (job.cancelled || e.name === 'AbortError') throw e;
+            console.warn('Попытка', attempt, 'не удалась:', e);
+            lastErr = e;
+            job.software = true;
+            job.ui.count.textContent = `Повторяю копию ${i}…`;
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+        if (!blob) throw lastErr;
         const name = `${job.stem}_копия_${String(i).padStart(2, '0')}.mp4`;
         const f = await store(blob, name);
         job.results.push(f);
@@ -315,7 +333,10 @@ async function run() {
       console.error(e);
       job.ui.cancel.style.display = 'none';
       setPill(job, 'err', 'Ошибка');
-      job.ui.count.textContent = String(e.message || e).slice(0, 140);
+      job.ui.count.textContent = (job.results.length
+        ? `Готово ${job.results.length} из ${job.total}. `
+        : '') + 'Браузер не смог закодировать видео. Попробуйте ещё раз, не сворачивая окно.';
+      job.ui.count.title = String(e.message || e);
       if (job.results.length) job.ui.actions.style.display = 'flex';
     }
   }

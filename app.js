@@ -268,15 +268,18 @@ export async function makeCopy(file, onProgress = () => {}, opts = {}) {
       Math.max(SETTINGS.bitrateFloor1080 * area, srcBitrate * p.bitrateVsSource)));
     p.fps = fps;
 
-    if (!(await canEncodeVideo('avc', { width: W, height: H, bitrate: p.bitrate }))) {
+    if (!(await canEncodeVideo('avc', { width: W, height: H, bitrate: p.bitrate,
+      ...(opts.software ? { hardwareAcceleration: 'prefer-software' } : {}) }))) {
       throw new Error('Это устройство не умеет кодировать H.264 видео такого размера');
     }
 
     const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
     const renderer = makeRenderer(W, H);
     renderer.setParams(p);
+    // opts.software — кодировать без видеокарты (запасной путь, если аппаратный кодировщик дал сбой)
     const vSource = new CanvasSource(renderer.canvas, {
       codec: 'avc', bitrate: p.bitrate, keyFrameInterval: p.keyFrameSec, latencyMode: 'quality',
+      ...(opts.software ? { hardwareAcceleration: 'prefer-software' } : {}),
     });
     output.addVideoTrack(vSource);
 
