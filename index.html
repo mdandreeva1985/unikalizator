@@ -191,7 +191,11 @@ async function store(blob, name) {
 }
 
 // --- сохранение в Фото / скачивание ---
-const canShareFiles = (() => {
+// На телефоне (iPhone, Android) — окно «Поделиться» → «Сохранить видео» в галерею.
+// На компьютере — сразу файлом в «Загрузки», без лишних окон.
+const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const canShareFiles = isPhone && (() => {
   try { return !!navigator.canShare && navigator.canShare({ files: [new File([''], 'a.mp4', { type: 'video/mp4' })] }); }
   catch { return false; }
 })();
@@ -242,7 +246,7 @@ function addVideo(file) {
       <div class="bar"><i></i></div>
       <button class="cancel">Отменить</button>
       <div class="actions" style="display:none">
-        <button class="all">${canShareFiles ? 'Сохранить в галерею' : 'Скачать все'}</button>
+        <button class="all">${canShareFiles ? 'Сохранить в галерею' : 'Скачать все в «Загрузки»'}</button>
         <button class="ghost more">По одной</button>
       </div>
       <div class="files"></div>
