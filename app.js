@@ -48,8 +48,10 @@ export const STRONG = {
   volumeDb: [-1.5, 1.5],
 };
 
-// РАМКИ: толщина в долях ширины кадра (0,015–0,03 = тонкая)
+// РАМКИ: появляются случайно примерно в 2 копиях из 10 (share), цвет — случайный.
+// Толщина в долях ширины кадра (0,015–0,03 = тонкая).
 export const FRAME = {
+  share: 0.2,
   width: [0.015, 0.03],
   white: [[1, 1, 1]],
   colors: [
@@ -61,6 +63,14 @@ export const FRAME = {
 const rnd = ([a, b]) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const even = (x) => Math.max(2, Math.round(x / 2) * 2);
+
+// Для серии из total копий выбирает, какие из них будут с рамкой и какой.
+// Например, из 10 копий — 2 случайные с рамкой (белой или цветной), из 5 — 1.
+export function planFrames(total) {
+  const count = Math.round(total * FRAME.share);
+  const idx = [...Array(total).keys()].sort(() => Math.random() - 0.5).slice(0, count);
+  return Array.from({ length: total }, (_, i) => (idx.includes(i) ? (Math.random() < 0.5 ? 'white' : 'color') : 'none'));
+}
 
 // opts.strong — сильная уникализация; opts.frame — 'none' | 'white' | 'color'
 export function makeParams(opts = {}) {
@@ -218,8 +228,14 @@ async function ensureAac() {
 // ---------------------------------------------------------------------------
 // Одна копия
 // ---------------------------------------------------------------------------
+// Сильная уникализация включена всегда. Рамка — только если её передали (opts.frame).
+// opts.signal — для кнопки «Отменить».
 export async function makeCopy(file, onProgress = () => {}, opts = {}) {
-  const p = makeParams(opts);
+  const p = makeParams({ strong: true, ...opts });
+  const checkCancel = () => {
+    if (opts.signal?.aborted) throw new DOMException('Отменено', 'AbortError');
+  };
+  checkCancel();
   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
   try {
     const vTrack = await input.getPrimaryVideoTrack();
@@ -277,6 +293,7 @@ export async function makeCopy(file, onProgress = () => {}, opts = {}) {
     output.setMetadataTags({ creationTime: new Date(Date.now() - Math.random() * 3 * 864e5) });
     await output.start();
 
+    if (opts.signal?.aborted) { await output.cancel().catch(() => {}); checkCancel(); }
     if (aSource) { await aSource.add(audio); aSource.close(); }
 
     const sink = new CanvasSink(vTrack, { width: W, height: H, fit: 'fill', crop, poolSize: 2 });
@@ -288,11 +305,17 @@ export async function makeCopy(file, onProgress = () => {}, opts = {}) {
       for (let j = 0; j < frameCount; j++) yield Math.min(t1 - 0.001, t0 + (j / fps) * p.speed);
     }
     let fi = 0;
-    for await (const wc of sink.canvasesAtTimestamps(times())) {
-      if (wc) renderer.draw(wc.canvas);   // если кадра нет — повторяем предыдущий
-      await vSource.add(fi / fps, 1 / fps);
-      fi++;
-      if (fi % 10 === 0) onProgress(fi / frameCount);
+    try {
+      for await (const wc of sink.canvasesAtTimestamps(times())) {
+        checkCancel();
+        if (wc) renderer.draw(wc.canvas);   // если кадра нет — повторяем предыдущий
+        await vSource.add(fi / fps, 1 / fps);
+        fi++;
+        if (fi % 10 === 0) onProgress(fi / frameCount);
+      }
+    } catch (e) {
+      await output.cancel().catch(() => {});
+      throw e;
     }
     vSource.close();
     await output.finalize();
