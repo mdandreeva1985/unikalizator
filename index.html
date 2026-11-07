@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Уникализатор</title>
 <meta name="description" content="Делает технически разные копии ролика прямо на телефоне">
-<meta name="theme-color" content="#d2462f">
+<meta name="theme-color" content="#f4f2ee">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Уникализатор">
@@ -15,101 +15,163 @@
 <link rel="icon" href="icons/icon-192.png">
 <script type="importmap">{ "imports": { "mediabunny": "./vendor/mediabunny.min.mjs" } }</script>
 <style>
-:root{--bg:#f6f4ef;--card:#fff;--ink:#1d1b18;--muted:#6b665d;--accent:#d2462f;--ok:#2f8a4c;--line:#e5e0d6;--warn:#fff4e5}
-@media (prefers-color-scheme:dark){:root{--bg:#161513;--card:#22201d;--ink:#f1ede6;--muted:#a39d92;--line:#36332e;--warn:#3a2e1c}}
+:root{
+  --bg:#f4f2ee;--card:#fff;--ink:#16161a;--muted:#77737b;--soft:#ece8e2;--line:#ebe7e1;
+  --a1:#ff5a36;--a2:#ff9a3c;--ok:#23a55a;--okbg:#e3f5ea;--err:#d33;--errbg:#fde8e8;--workbg:#fff0e6;
+  --shadow:0 10px 30px rgba(30,20,10,.06);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121214;--card:#1d1d21;--ink:#f3f1ee;--muted:#9a96a0;--soft:#2a2a30;--line:#2c2c31;
+  --okbg:#173a26;--errbg:#3c1a1a;--workbg:#3a2516;--shadow:none}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
-main{max-width:520px;margin:0 auto;padding:max(20px,env(safe-area-inset-top)) 16px 60px}
-h1{font-size:28px;margin:6px 0 4px}
-p.sub{color:var(--muted);margin:0 0 18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
-.lbl{display:block;font-weight:600;margin:0 0 10px}
-.file{display:block;border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);cursor:pointer}
-.file.has{border-color:var(--ok);color:var(--ink)}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font:17px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Segoe UI,Roboto,sans-serif}
+main{max-width:560px;margin:0 auto;padding:max(24px,env(safe-area-inset-top)) 18px calc(40px + env(safe-area-inset-bottom))}
+h1{margin:4px 0 6px;font-size:40px;line-height:1.1;font-weight:800;letter-spacing:-.5px;
+  background:linear-gradient(90deg,var(--a1),var(--a2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--muted);margin:0 0 22px;font-size:18px}
+.card{background:var(--card);border-radius:26px;padding:22px 20px;box-shadow:var(--shadow);margin-bottom:26px}
+.cap{font-size:14px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+.stepper{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.stepper button{width:64px;height:64px;border:0;border-radius:18px;background:var(--soft);color:var(--ink);font-size:30px;font-weight:500}
+.stepper button:disabled{opacity:.35}
+.num{text-align:center}
+.num b{display:block;font-size:56px;line-height:1;font-weight:800;letter-spacing:-1px}
+.num{flex:1;min-width:0}
+.num span{color:var(--muted);font-size:15px;white-space:nowrap}
+.quick{display:flex;gap:8px;margin:18px 0}
+.quick button{flex:1 1 0;min-width:0;height:48px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:18px;font-weight:600}
+.quick button.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.pick{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;height:64px;border:0;border-radius:20px;cursor:pointer;
+  background:linear-gradient(90deg,var(--a1),var(--a2));color:#fff;font-size:20px;font-weight:700;box-shadow:0 10px 24px rgba(255,110,50,.28)}
+.pick svg{width:24px;height:24px}
 input[type=file]{display:none}
-.count{display:flex;gap:6px}
-.count button{flex:1 1 0;min-width:0;padding:12px 0;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:16px}
-.count button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.go{width:100%;padding:16px;border:0;border-radius:14px;background:var(--accent);color:#fff;font-size:18px;font-weight:700}
-.go:disabled{opacity:.5}
-.bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:10px 0}
-.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
-.muted{color:var(--muted);font-size:14px}
-.item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
-.item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.item button,.item a{flex:none;padding:8px 14px;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-weight:600;font-size:15px;text-decoration:none}
-.all{display:block;width:100%;margin-top:14px;padding:14px;border-radius:12px;border:0;background:var(--ink);color:var(--bg);font-weight:700;font-size:16px}
-.note{background:var(--warn);border-radius:12px;padding:12px 14px;font-size:14px;margin-bottom:14px}
-.install{display:none}
-footer{color:var(--muted);font-size:13px;text-align:center;margin-top:24px}
+.hint{color:var(--muted);font-size:14px;text-align:center;margin:12px 0 0}
+h2{font-size:28px;margin:0 0 14px;font-weight:800;letter-spacing:-.3px}
+.empty{color:var(--muted);text-align:center;padding:26px 10px}
+.vid{display:flex;gap:16px;background:var(--card);border-radius:24px;padding:16px;box-shadow:var(--shadow);margin-bottom:14px}
+.thumb{flex:none;width:76px;height:100px;border-radius:14px;background:var(--soft);overflow:hidden}
+.thumb canvas{width:100%;height:100%;object-fit:cover;display:block}
+.info{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.name{font-weight:700;font-size:18px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.top{align-items:flex-start}
+.pill{flex:none;padding:5px 12px;border-radius:999px;font-size:14px;font-weight:600;background:var(--soft);color:var(--muted)}
+.pill.work{background:var(--workbg);color:var(--a1)}
+.pill.done{background:var(--okbg);color:var(--ok)}
+.pill.err{background:var(--errbg);color:var(--err)}
+.count{color:var(--muted);font-size:15px}
+.bar{height:8px;border-radius:6px;background:var(--soft);overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:6px;background:linear-gradient(90deg,var(--a1),var(--a2));transition:width .25s}
+.vid.done .bar i{background:var(--ok)}
+.actions{display:flex;gap:8px;margin-top:4px}
+.actions button{flex:1;height:42px;border-radius:12px;border:0;font-size:15px;font-weight:700;background:var(--ink);color:var(--bg)}
+.actions button.ghost{flex:none;padding:0 14px;background:var(--soft);color:var(--ink)}
+.files{display:none;margin-top:6px}
+.files.open{display:block}
+.files div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.files span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.files button{flex:none;border:0;background:none;color:var(--a1);font-weight:700;font-size:14px}
+.install{display:none;background:var(--card);border-radius:18px;padding:14px 16px;font-size:15px;margin-bottom:18px;box-shadow:var(--shadow)}
+.warn{display:none;background:var(--workbg);border-radius:14px;padding:12px 14px;font-size:14px;margin:-12px 0 18px}
+footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}
 </style>
 </head>
 <body>
 <main>
   <h1>Уникализатор</h1>
-  <p class="sub">Делает технически разные копии ролика. Всё происходит на вашем устройстве, ролики никуда не отправляются.</p>
+  <p class="sub">Видео с телефона — копии, которые не склеятся с оригиналом</p>
 
-  <div class="note install" id="install">
-    <b>Установите на экран «Домой»:</b> нажмите «Поделиться» <span aria-hidden="true">⎋</span> внизу Safari и выберите «На экран “Домой”». После этого приложение работает даже без интернета.
+  <div class="install" id="install">
+    <b>Установите на экран «Домой»:</b> нажмите «Поделиться» внизу Safari, затем «На экран “Домой”». После этого приложение работает даже без интернета.
   </div>
 
-  <div class="card">
-    <span class="lbl">1. Ролик</span>
-    <label class="file" id="fl" for="f">Нажмите, чтобы выбрать видео</label>
-    <input type="file" id="f" accept="video/*">
-  </div>
+  <section class="card">
+    <p class="cap">Сколько копий сделать</p>
+    <div class="stepper">
+      <button id="minus" aria-label="Меньше">−</button>
+      <div class="num"><b id="n">10</b><span id="nlabel">копий на каждое видео</span></div>
+      <button id="plus" aria-label="Больше">+</button>
+    </div>
+    <div class="quick" id="quick"></div>
+    <label class="pick" for="f">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>
+      Выбрать видео
+    </label>
+    <input type="file" id="f" accept="video/*" multiple>
+    <p class="hint">Можно выбрать сразу несколько роликов</p>
+  </section>
 
-  <div class="card">
-    <span class="lbl">2. Сколько копий</span>
-    <div class="count" id="cnt"></div>
-  </div>
+  <h2>Мои видео</h2>
+  <div class="warn" id="warn">Пока идёт работа, не блокируйте экран и не сворачивайте приложение.</div>
+  <div id="list"><p class="empty">Здесь появятся ваши ролики и их копии</p></div>
 
-  <button class="go" id="go" disabled>Сделать копии</button>
-
-  <div class="card" id="st" style="display:none;margin-top:14px">
-    <div id="stt"></div>
-    <div class="bar"><i id="pb"></i></div>
-    <div class="muted" id="stm">Не закрывайте приложение и не блокируйте экран, пока идёт работа.</div>
-    <div id="list"></div>
-    <div id="allbox"></div>
-  </div>
-
-  <footer>Без зеркала · метаданные удаляются · обрезка только долей секунды в начале и в конце</footer>
+  <footer>Всё делается на вашем телефоне, видео никуда не отправляется.<br>Без зеркала · метаданные удаляются · середина ролика не трогается</footer>
 </main>
 
 <script type="module">
 import { makeCopy } from './app.js';
+import { Input, ALL_FORMATS, BlobSource, CanvasSink } from 'mediabunny';
 
+const MAX = 10;
 const $ = (id) => document.getElementById(id);
-let n = 10, file = null, results = [];
+let n = 10;
+const queue = [];
+let running = false, wakeLock = null;
 
-// кнопки количества
-[1, 3, 5, 10, 15, 20].forEach((v) => {
+// --- выбор количества ---
+const word = (k) => (k % 10 === 1 && k % 100 !== 11) ? 'копия' : (k % 10 >= 2 && k % 10 <= 4 && (k % 100 < 12 || k % 100 > 14)) ? 'копии' : 'копий';
+const QUICK = [1, 3, 5, 10];
+QUICK.forEach((v) => {
   const b = document.createElement('button');
   b.textContent = v;
-  if (v === n) b.classList.add('on');
-  b.onclick = () => { n = v; [...$('cnt').children].forEach((x) => x.classList.toggle('on', x === b)); };
-  $('cnt').appendChild(b);
+  b.onclick = () => setN(v);
+  $('quick').appendChild(b);
 });
+function setN(v) {
+  n = Math.max(1, Math.min(MAX, v));
+  $('n').textContent = n;
+  $('nlabel').textContent = `${word(n)} на видео`;
+  $('minus').disabled = n <= 1; $('plus').disabled = n >= MAX;
+  [...$('quick').children].forEach((b) => b.classList.toggle('on', +b.textContent === n));
+}
+$('minus').onclick = () => setN(n - 1);
+$('plus').onclick = () => setN(n + 1);
+setN(10);
 
-// подсказка про установку на iPhone (если открыто в Safari, а не с экрана «Домой»)
+// --- подсказка про установку ---
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 if (isIOS && !navigator.standalone) $('install').style.display = 'block';
 
-$('f').onchange = () => {
-  file = $('f').files[0];
-  if (file) {
-    $('fl').textContent = '✔ ' + file.name + ' (' + (file.size / 1048576).toFixed(1) + ' МБ)';
-    $('fl').classList.add('has');
-    $('go').disabled = false;
+// --- хранение готовых копий на диске устройства (меньше памяти) ---
+let dir = null;
+(async () => {
+  try {
+    const root = await navigator.storage.getDirectory();
+    await root.removeEntry('copies', { recursive: true }).catch(() => {});
+    dir = await root.getDirectoryHandle('copies', { create: true });
+    const h = await dir.getFileHandle('_probe', { create: true });
+    const w = await h.createWritable(); await w.write('1'); await w.close();
+    await dir.removeEntry('_probe');
+  } catch { dir = null; }
+})();
+async function store(blob, name) {
+  if (dir) {
+    try {
+      const h = await dir.getFileHandle(name, { create: true });
+      const w = await h.createWritable(); await w.write(blob); await w.close();
+      const f = await h.getFile();
+      return new File([f], name, { type: 'video/mp4' });
+    } catch {}
   }
-};
+  return new File([blob], name, { type: 'video/mp4' });
+}
 
+// --- сохранение в Фото / скачивание ---
 const canShareFiles = (() => {
   try { return !!navigator.canShare && navigator.canShare({ files: [new File([''], 'a.mp4', { type: 'video/mp4' })] }); }
   catch { return false; }
 })();
-
 async function save(files) {
   if (canShareFiles) {
     try { await navigator.share({ files }); return; }
@@ -123,61 +185,117 @@ async function save(files) {
     await new Promise((r) => setTimeout(r, 400));
   }
 }
-const saveLabel = canShareFiles ? 'Сохранить' : 'Скачать';
 
-function addItem(f) {
-  const row = document.createElement('div');
-  row.className = 'item';
-  const name = document.createElement('span');
-  name.textContent = f.name;
-  const btn = document.createElement('button');
-  btn.textContent = saveLabel;
-  btn.onclick = () => save([f]);
-  row.append(name, btn);
-  $('list').appendChild(row);
+// --- превью ---
+async function thumbnail(file, canvas) {
+  try {
+    const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
+    const track = await input.getPrimaryVideoTrack();
+    const dur = await input.computeDuration();
+    const w = 152, h = Math.round(152 * track.displayHeight / track.displayWidth);
+    const wc = await new CanvasSink(track, { width: w, height: h, fit: 'fill' }).getCanvas(Math.min(0.6, dur / 2));
+    canvas.width = w; canvas.height = h;
+    if (wc) canvas.getContext('2d').drawImage(wc.canvas, 0, 0);
+    input.dispose?.();
+  } catch {}
 }
 
-$('go').onclick = async () => {
-  if (!file) return;
-  $('go').disabled = true;
-  $('st').style.display = 'block';
-  $('list').innerHTML = ''; $('allbox').innerHTML = '';
-  results = [];
-  let lock = null;
-  try { lock = await navigator.wakeLock?.request('screen'); } catch {}
+// --- карточка видео ---
+function addVideo(file) {
+  if ($('list').querySelector('.empty')) $('list').innerHTML = '';
   const stem = file.name.replace(/\.[^.]+$/, '').slice(0, 60) || 'ролик';
-  const started = performance.now();
-  try {
-    for (let i = 1; i <= n; i++) {
-      $('stt').textContent = `Делаю копию ${i} из ${n}…`;
-      const blob = await makeCopy(file, (p) => { $('pb').style.width = (((i - 1) + p) / n * 100) + '%'; });
-      const f = new File([blob], `${stem}_копия_${String(i).padStart(2, '0')}.mp4`, { type: 'video/mp4' });
-      results.push(f);
-      addItem(f);
-      const per = (performance.now() - started) / i / 1000;
-      $('stm').textContent = `≈ ${Math.round(per)} сек на копию. Не блокируйте экран, пока идёт работа.`;
+  const job = { file, stem, total: n, done: 0, results: [] };
+  const el = document.createElement('div');
+  el.className = 'vid';
+  el.innerHTML = `
+    <div class="thumb"><canvas></canvas></div>
+    <div class="info">
+      <div class="top"><span class="name"></span><span class="pill">В очереди</span></div>
+      <span class="count"></span>
+      <div class="bar"><i></i></div>
+      <div class="actions" style="display:none">
+        <button class="all">${canShareFiles ? 'Сохранить в Фото' : 'Скачать все'}</button>
+        <button class="ghost more">По одной</button>
+      </div>
+      <div class="files"></div>
+    </div>`;
+  el.querySelector('.name').textContent = stem;
+  job.el = el;
+  job.ui = {
+    pill: el.querySelector('.pill'), count: el.querySelector('.count'), bar: el.querySelector('.bar i'),
+    actions: el.querySelector('.actions'), files: el.querySelector('.files'),
+  };
+  el.querySelector('.all').onclick = () => save(job.results);
+  el.querySelector('.more').onclick = () => job.ui.files.classList.toggle('open');
+  updateJob(job, 0);
+  $('list').appendChild(el);
+  thumbnail(file, el.querySelector('canvas'));
+  queue.push(job);
+  run();
+}
+
+function updateJob(job, frac) {
+  job.ui.count.textContent = `${job.done} из ${job.total} ${word(job.total)}`;
+  job.ui.bar.style.width = ((job.done + frac) / job.total * 100) + '%';
+}
+function setPill(job, cls, text) {
+  job.ui.pill.className = 'pill ' + cls;
+  job.ui.pill.textContent = text;
+}
+
+async function run() {
+  if (running) return;
+  running = true;
+  $('warn').style.display = 'block';
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+  while (queue.length) {
+    const job = queue.shift();
+    setPill(job, 'work', 'Обработка');
+    try {
+      for (let i = 1; i <= job.total; i++) {
+        const blob = await makeCopy(job.file, (p) => updateJob(job, p));
+        const name = `${job.stem}_копия_${String(i).padStart(2, '0')}.mp4`;
+        const f = await store(blob, name);
+        job.results.push(f);
+        job.done = i;
+        updateJob(job, 0);
+        const row = document.createElement('div');
+        const s = document.createElement('span'); s.textContent = name;
+        const b = document.createElement('button'); b.textContent = canShareFiles ? 'Сохранить' : 'Скачать';
+        b.onclick = () => save([f]);
+        row.append(s, b);
+        job.ui.files.appendChild(row);
+      }
+      setPill(job, 'done', 'Готово');
+      job.el.classList.add('done');
+      job.ui.actions.style.display = 'flex';
+    } catch (e) {
+      console.error(e);
+      setPill(job, 'err', 'Ошибка');
+      job.ui.count.textContent = String(e.message || e).slice(0, 140);
+      if (job.results.length) job.ui.actions.style.display = 'flex';
     }
-    $('pb').style.width = '100%';
-    $('stt').textContent = `Готово: ${n} ${n === 1 ? 'копия' : n < 5 ? 'копии' : 'копий'}`;
-    $('stm').textContent = canShareFiles ? 'Нажмите «Сохранить» и выберите «Сохранить видео», копии появятся в Фото.' : '';
-    if (results.length > 1) {
-      const all = document.createElement('button');
-      all.className = 'all';
-      all.textContent = canShareFiles ? `Сохранить все ${results.length} в Фото` : `Скачать все ${results.length}`;
-      all.onclick = () => save(results);
-      $('allbox').appendChild(all);
-    }
-  } catch (e) {
-    console.error(e);
-    $('stt').textContent = 'Ошибка: ' + (e.message || e);
-  } finally {
-    lock?.release?.().catch(() => {});
-    $('go').disabled = false;
   }
+  running = false;
+  $('warn').style.display = 'none';
+  try { await wakeLock?.release(); } catch {}
+}
+
+$('f').onchange = () => {
+  [...$('f').files].forEach(addVideo);
+  $('f').value = '';
 };
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
-window.__makeCopy = makeCopy; // для автотестов
+// обновление приложения: новая версия подхватывается автоматически
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!reloaded && !running) { reloaded = true; location.reload(); }
+  });
+}
+window.__makeCopy = makeCopy;  // для автотестов
+window.__addVideo = addVideo;
 </script>
 </body>
 </html>
