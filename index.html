@@ -188,14 +188,57 @@ async function codeHash(code) {
 const KEY = 'uni-access';
 // --- пробный период: 1 день (24 часа) с первого открытия, до 3 копий из ролика ---
 const TRIAL_DAYS = 1, TRIAL_COPIES = 3, TRIAL_KEY = 'uni-trial-start';
-let saved = null, trialStart = Date.now();
-try {
-  saved = localStorage.getItem(KEY);
-  const t = +localStorage.getItem(TRIAL_KEY);
-  if (t > 0 && t <= Date.now()) trialStart = t; else localStorage.setItem(TRIAL_KEY, String(trialStart));
-} catch {}
-const paid = !!saved && CODES.has(saved);
-const msLeft = trialStart + TRIAL_DAYS * 864e5 - Date.now();
+
+// Надёжное хранилище: одно и то же значение пишем в 4 места (localStorage, cookie,
+// IndexedDB, Cache Storage). Если телефон сотрёт одно — возьмём из другого.
+const kv = {
+  async get(k) {
+    const out = [];
+    try { out.push(localStorage.getItem(k)); } catch {}
+    try { const m = document.cookie.match(new RegExp('(?:^|; )' + k + '=([^;]*)')); out.push(m && decodeURIComponent(m[1])); } catch {}
+    out.push(await idb('get', k));
+    try { const r = await (await caches.open('uni-meta')).match('__meta/' + k); out.push(r && await r.text()); } catch {}
+    return out.filter((v) => v != null && v !== '');
+  },
+  async set(k, v) {
+    let ok = 0;
+    try { localStorage.setItem(k, v); ok += localStorage.getItem(k) === v; } catch {}
+    try { document.cookie = `${k}=${encodeURIComponent(v)}; max-age=157680000; path=/; SameSite=Lax; Secure`; ok += document.cookie.includes(k + '='); } catch {}
+    ok += (await idb('put', k, v)) ? 1 : 0;
+    try { await (await caches.open('uni-meta')).put('__meta/' + k, new Response(v)); ok++; } catch {}
+    return ok;   // в скольких местах удалось сохранить
+  },
+};
+function idb(op, k, v) {
+  return new Promise((res) => {
+    try {
+      const r = indexedDB.open('uni', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onerror = () => res(null);
+      r.onsuccess = () => {
+        try {
+          const tx = r.result.transaction('kv', op === 'get' ? 'readonly' : 'readwrite');
+          const q = op === 'get' ? tx.objectStore('kv').get(k) : tx.objectStore('kv').put(v, k);
+          q.onsuccess = () => res(op === 'get' ? q.result ?? null : true);
+          q.onerror = () => res(null);
+        } catch { res(null); }
+      };
+    } catch { res(null); }
+  });
+}
+
+const now = Date.now();
+const savedCodes = await kv.get(KEY);
+const saved = savedCodes.find((h) => CODES.has(h)) || null;
+if (saved) kv.set(KEY, saved);                      // восстановить код во все хранилища
+// дата начала — самая ранняя из сохранённых (если где-то стёрлась, берём из другого места)
+const starts = (await kv.get(TRIAL_KEY)).map(Number).filter((t) => t > 0 && t <= now + 864e5);
+let trialStart = starts.length ? Math.min(...starts) : now;
+const persisted = await kv.set(TRIAL_KEY, String(trialStart));
+const paid = !!saved;
+// если браузер ничего не запоминает (часто — внутри Instagram/Telegram), бесплатного периода нет
+const storageBroken = !paid && persisted === 0;
+const msLeft = storageBroken ? 0 : trialStart + TRIAL_DAYS * 864e5 - now;
 const inTrial = !paid && msLeft > 0;
 const daysLeft = Math.max(1, Math.ceil(msLeft / 864e5));
 const daysWord = (d) => d === 1 ? 'день' : d < 5 ? 'дня' : 'дней';
@@ -215,6 +258,8 @@ if (inTrial) {
     ? `Бесплатно ещё ${hoursLeft} ч`
     : `Бесплатно ещё ${daysLeft} ${daysWord(daysLeft)}`;
   document.getElementById('trialCode').onclick = () => openGate('Введите код доступа, который вы получили после покупки', true);
+} else if (storageBroken) {
+  openGate('Этот браузер не сохраняет данные, поэтому пробный период здесь не работает. Откройте приложение в Chrome или Safari — или введите код доступа', false);
 } else if (!paid) {
   openGate('Пробный период закончился. Чтобы продолжить, купите доступ и введите код', false);
 }
@@ -228,7 +273,7 @@ document.getElementById('gateForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const h = await codeHash(codeInput.value);
   if (CODES.has(h)) {
-    try { localStorage.setItem(KEY, h); } catch {}
+    await kv.set(KEY, h);
     try { await navigator.storage?.persist?.(); } catch {}
     document.getElementById('gate').hidden = true;
     if (!paid) location.reload();   // снимаем ограничения пробного периода

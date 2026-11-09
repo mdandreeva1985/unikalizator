@@ -1,6 +1,7 @@
 // Сохраняет приложение на устройстве, чтобы оно работало без интернета.
 // При обновлении приложения увеличьте номер версии.
-const VERSION = 'uni-v21';
+const VERSION = 'uni-v22';
+const META = 'uni-meta';   // служебные данные приложения (дата пробного периода) — не удаляем при обновлении
 const FILES = [
   './', './index.html', './app.js', './codes.js', './manifest.webmanifest',
   './vendor/mediabunny.min.mjs', './vendor/mediabunny-aac-encoder.min.mjs',
@@ -16,20 +17,34 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== META).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
-// Сначала из памяти устройства, если нет — из интернета
+// Страница и код приложения: сначала свежая версия с сайта (если есть интернет),
+// иначе — сохранённая. Так обновления приходят сразу, а без интернета всё работает.
+const FRESH = /\/(index\.html|app\.js|codes\.js|manifest\.webmanifest)?$/;
+
+function networkFirst(req) {
+  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000));
+  return Promise.race([fetch(req, { cache: 'no-cache' }), timeout]).then((res) => {
+    if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
+    return res;
+  }).catch(() => caches.match(req, { ignoreSearch: true })
+    .then((hit) => hit || caches.match('./index.html')));
+}
+
+function cacheFirst(req) {
+  return caches.match(req, { ignoreSearch: true }).then((hit) => hit || fetch(req).then((res) => {
+    if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
+    return res;
+  }));
+}
+
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then((res) => {
-      if (res.ok && new URL(e.request.url).origin === location.origin) {
-        const copy = res.clone();
-        caches.open(VERSION).then((c) => c.put(e.request, copy));
-      }
-      return res;
-    }).catch(() => caches.match('./index.html')))
-  );
+  const url = new URL(e.request.url);
+  if (url.origin !== location.origin) return;
+  if (url.pathname.includes('/__meta/')) return;
+  e.respondWith(e.request.mode === 'navigate' || FRESH.test(url.pathname) ? networkFirst(e.request) : cacheFirst(e.request));
 });
