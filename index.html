@@ -136,7 +136,7 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
   </div>
 
   <div class="trial" id="trial" hidden>
-    <div class="trial-text"><b id="trialDays">Пробный период: 3 дня</b><span>до 3 копий из ролика</span></div>
+    <div class="trial-text"><b id="trialDays">Бесплатно 1 день</b><span>до 3 копий из ролика</span></div>
     <button type="button" id="trialCode">Ввести код</button>
     <a href="https://mdandreeva1985.github.io/unikalizator-site/" target="_blank" rel="noopener">Купить</a>
   </div>
@@ -186,8 +186,8 @@ async function codeHash(code) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
 }
 const KEY = 'uni-access';
-// --- пробный период: 3 дня с первого открытия, до 3 копий из ролика ---
-const TRIAL_DAYS = 3, TRIAL_COPIES = 3, TRIAL_KEY = 'uni-trial-start';
+// --- пробный период: 1 день (24 часа) с первого открытия, до 3 копий из ролика ---
+const TRIAL_DAYS = 1, TRIAL_COPIES = 3, TRIAL_KEY = 'uni-trial-start';
 let saved = null, trialStart = Date.now();
 try {
   saved = localStorage.getItem(KEY);
@@ -209,7 +209,11 @@ function openGate(text, closable) {
 document.getElementById('gateClose').onclick = () => { document.getElementById('gate').hidden = true; };
 if (inTrial) {
   document.getElementById('trial').hidden = false;
-  document.getElementById('trialDays').textContent = `Бесплатно ещё ${daysLeft} ${daysWord(daysLeft)}`;
+  // меньше суток — показываем часы: «Бесплатно ещё 5 ч»
+  const hoursLeft = Math.max(1, Math.ceil(msLeft / 36e5));
+  document.getElementById('trialDays').textContent = msLeft < 864e5
+    ? `Бесплатно ещё ${hoursLeft} ч`
+    : `Бесплатно ещё ${daysLeft} ${daysWord(daysLeft)}`;
   document.getElementById('trialCode').onclick = () => openGate('Введите код доступа, который вы получили после покупки', true);
 } else if (!paid) {
   openGate('Пробный период закончился. Чтобы продолжить, купите доступ и введите код', false);

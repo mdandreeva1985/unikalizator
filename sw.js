@@ -1,6 +1,6 @@
 // Сохраняет приложение на устройстве, чтобы оно работало без интернета.
 // При обновлении приложения увеличьте номер версии.
-const VERSION = 'uni-v20';
+const VERSION = 'uni-v21';
 const FILES = [
   './', './index.html', './app.js', './codes.js', './manifest.webmanifest',
   './vendor/mediabunny.min.mjs', './vendor/mediabunny-aac-encoder.min.mjs',
