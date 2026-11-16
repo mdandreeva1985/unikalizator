@@ -14,16 +14,22 @@ export function tgInitData() {
   const h = new URLSearchParams(location.hash.slice(1));
   return h.get('tgWebAppData') || '';
 }
-function loadTelegram() {
-  return new Promise((res) => {
-    if (window.Telegram?.WebApp) return res(window.Telegram.WebApp);
-    const s = document.createElement('script');
-    s.src = 'https://telegram.org/js/telegram-web-app.js';
-    s.onload = () => res(window.Telegram?.WebApp || null);
-    s.onerror = () => res(null);
-    document.head.appendChild(s);
-  });
+// Команды Telegram напрямую, без скрипта с telegram.org (он часто медленно грузится или не грузится в России)
+function postEvent(type, data = {}) {
+  try {
+    if (window.TelegramWebviewProxy?.postEvent) return window.TelegramWebviewProxy.postEvent(type, JSON.stringify(data));
+    if (window.external?.notify) return window.external.notify(JSON.stringify({ eventType: type, eventData: data }));
+    window.parent.postMessage(JSON.stringify({ eventType: type, eventData: data }), '*');
+  } catch {}
 }
+export const tg = {
+  ready: () => postEvent('web_app_ready'),
+  expand: () => postEvent('web_app_expand'),
+  close: () => postEvent('web_app_close'),
+  openLink: (url) => postEvent('web_app_open_link', { url }),
+  openTelegramLink: (url) => postEvent('web_app_open_tg_link', { path_full: url.replace(/^https:\/\/t\.me/, '') }),
+};
+const loadTelegram = async () => tg;
 
 // экран поверх приложения (внутри Telegram)
 function screen({ title, text, button, onClick, link }) {
@@ -49,10 +55,10 @@ export async function runInTelegram({ product, name, price, about }) {
   if (!initData) return false;
   screen({ title: name, text: 'Открываем приложение…' });
   const tg = await loadTelegram();
-  tg?.ready?.(); tg?.expand?.();
+  tg.ready(); tg.expand();
   const r = await post('/pass', { initData, product });
   if (r.ok) {
-    const open = () => (tg?.openLink ? tg.openLink(r.url) : (location.href = r.url));
+    const open = () => tg.openLink(r.url);
     screen({
       title: name,
       text: 'Приложение откроется в браузере — там ролики сохраняются в галерею. Установите его на экран «Домой», и дальше открывайте прямо с иконки.',
@@ -63,7 +69,7 @@ export async function runInTelegram({ product, name, price, about }) {
     screen({
       title: name, text: `${about}<br><br>Стоимость: <b>${price}</b> один раз и навсегда.`,
       button: `Купить ${name}`,
-      onClick: () => { tg?.openTelegramLink ? tg.openTelegramLink(`https://t.me/${BOT}?start=${product}`) : (location.href = `https://t.me/${BOT}?start=${product}`); tg?.close?.(); },
+      onClick: () => { tg.openTelegramLink(`https://t.me/${BOT}?start=${product}`); setTimeout(() => tg.close(), 300); },
     });
   } else {
     screen({ title: name, text: r.error === 'network'
