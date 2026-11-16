@@ -89,6 +89,8 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
 .gate-err[hidden]{display:none}
 .gate-buy{color:var(--muted);font-size:15px;background:none;border:0;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .gate-buy[hidden]{display:none}
+.gate-codebox{display:flex;flex-direction:column;gap:14px}
+.gate-codebox[hidden]{display:none}
 .gate-buy-btn{display:flex;align-items:center;justify-content:center;height:56px;border-radius:18px;background:var(--ink);color:var(--bg);font-weight:700;font-size:17px;text-decoration:none}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;
   background:#16161a;color:#fff;padding:14px 18px;border-radius:14px;font-size:15px;line-height:1.4;width:max-content;max-width:calc(100% - 32px);text-align:center;transition:.25s;z-index:60}
@@ -117,11 +119,15 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
 <div id="gate" class="gate" hidden>
   <form class="gate-card" id="gateForm" autocomplete="off">
     <span class="gate-t">Уникализатор</span>
-    <p id="gateText">Введите код доступа, который вы получили после покупки</p>
-    <input id="code" inputmode="text" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX" maxlength="16" aria-label="Код доступа">
-    <span class="gate-err" id="gateErr" hidden>Такого кода нет. Проверьте буквы и цифры и попробуйте ещё раз.</span>
-    <button class="pick" type="submit">Войти</button>
-    <a class="gate-buy-btn" href="https://mdandreeva1985.github.io/unikalizator-site/" target="_blank" rel="noopener">Подробнее и купить доступ</a>
+    <p id="gateText">Приложение открывается через Telegram-бот: нажмите «Открыть» в боте @Marya_andreeva_Bot</p>
+    <span class="gate-err" id="gateMsg" hidden></span>
+    <a class="gate-buy-btn" id="gateTg" href="https://t.me/Marya_andreeva_Bot?start=uniq">Открыть в Telegram</a>
+    <button type="button" class="gate-buy" id="haveCode">У меня есть код доступа</button>
+    <div class="gate-codebox" id="codeBox" hidden>
+      <input id="code" inputmode="text" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX" maxlength="16" aria-label="Код доступа">
+      <span class="gate-err" id="gateErr" hidden>Такого кода нет. Проверьте буквы и цифры и попробуйте ещё раз.</span>
+      <button class="pick" type="submit">Войти</button>
+    </div>
     <button type="button" class="gate-buy" id="gateClose" hidden>Продолжить пробный период</button>
   </form>
 </div>
@@ -178,6 +184,7 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
 <script type="module">
 import { makeCopy, planFrames, detectEdgeText } from './app.js';
 import { SALT, CODES } from './codes.js';
+import { runInTelegram, redeemPass, savedToken, recheck, ERRORS } from './tgaccess.js';
 
 // --- код доступа: вводится один раз на устройстве, дальше работает без интернета ---
 async function codeHash(code) {
@@ -227,10 +234,20 @@ function idb(op, k, v) {
   });
 }
 
+// Внутри Telegram (мини-апп в боте) приложение не запускаем, а открываем в браузере с доступом
+const inTelegram = await runInTelegram({
+  product: 'uniq', name: 'Уникализатор', price: '990 ₽',
+  about: 'Делает из одного ролика до 10 уникальных копий прямо на телефоне. Для соцсетей каждая копия выглядит как новое видео.',
+});
+const TG_KEY = 'uni-tg';
+const passResult = inTelegram ? null : await redeemPass({ product: 'uniq', kv, key: TG_KEY });
+const tgToken = inTelegram ? null : await savedToken({ kv, key: TG_KEY, product: 'uniq' });
+if (tgToken) recheck({ kv, key: TG_KEY, token: tgToken }).then((ok) => { if (!ok) location.reload(); });
+
 const now = Date.now();
 const savedCodes = await kv.get(KEY);
-const saved = savedCodes.find((h) => CODES.has(h)) || null;
-if (saved) kv.set(KEY, saved);                      // восстановить код во все хранилища
+const saved = savedCodes.find((h) => CODES.has(h)) || tgToken || null;
+if (saved && saved !== tgToken) kv.set(KEY, saved);   // восстановить код во все хранилища
 // дата начала — самая ранняя из сохранённых (если где-то стёрлась, берём из другого места)
 // ПРОБНЫЙ ПЕРИОД ВЫКЛЮЧЕН: приложение сразу просит код. Чтобы вернуть — поставьте true.
 const TRIAL_ENABLED = false;
@@ -265,11 +282,22 @@ if (inTrial) {
   document.getElementById('trialCode').onclick = () => openGate('Введите код доступа, который вы получили после покупки', true);
 } else if (storageBroken) {
   openGate('Этот браузер не сохраняет данные, поэтому пробный период здесь не работает. Откройте приложение в Chrome или Safari — или введите код доступа', false);
+} else if (inTelegram) {
+  // экран мини-аппа уже показан
+} else if (!paid && passResult?.error) {
+  openGate('Приложение открывается через Telegram-бот: нажмите «Открыть» в боте @Marya_andreeva_Bot', false);
+  document.getElementById('gateMsg').textContent = ERRORS[passResult.error] || ERRORS.bad_pass;
+  document.getElementById('gateMsg').hidden = false;
 } else if (!paid) {
   openGate(TRIAL_ENABLED
     ? 'Пробный период закончился. Чтобы продолжить, купите доступ и введите код'
-    : 'Введите код доступа, который вы получили после покупки', false);
+    : 'Приложение открывается через Telegram-бот: нажмите «Открыть» в боте @Marya_andreeva_Bot', false);
 }
+document.getElementById('haveCode').onclick = () => {
+  document.getElementById('codeBox').hidden = false;
+  document.getElementById('haveCode').hidden = true;
+  setTimeout(() => document.getElementById('code').focus(), 100);
+};
 const codeInput = document.getElementById('code');
 codeInput.addEventListener('input', () => {   // автоматически ставим дефисы: XXXX-XXXX-XXXX
   const v = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
@@ -340,7 +368,7 @@ document.fonts?.ready.then(fitSub);
 // --- открыто внутри Instagram / Telegram / VK и т. п.? Там файлы не скачиваются ---
 (() => {
   const ua = navigator.userAgent;
-  const inApp = /Instagram|FBAN|FBAV|FB_IAB|Telegram|VKAndroidApp|VKClient|Line\/|MicroMessenger|; wv\)/i.test(ua);
+  const inApp = !inTelegram && /Instagram|FBAN|FBAV|FB_IAB|Telegram|VKAndroidApp|VKClient|Line\/|MicroMessenger|; wv\)/i.test(ua);
   if (!inApp) return;
   $('inapp').hidden = false;
   const url = location.href.split('#')[0];

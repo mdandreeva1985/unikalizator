@@ -1,9 +1,9 @@
 // Сохраняет приложение на устройстве, чтобы оно работало без интернета.
 // При обновлении приложения увеличьте номер версии.
-const VERSION = 'uni-v23';
+const VERSION = 'uni-v24';
 const META = 'uni-meta';   // служебные данные приложения (дата пробного периода) — не удаляем при обновлении
 const FILES = [
-  './', './index.html', './app.js', './codes.js', './manifest.webmanifest',
+  './', './index.html', './app.js', './codes.js', './tgaccess.js', './manifest.webmanifest',
   './vendor/mediabunny.min.mjs', './vendor/mediabunny-aac-encoder.min.mjs',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/maskable-192.png', './icons/maskable-512.png',
 ];
