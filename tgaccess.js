@@ -125,6 +125,7 @@ export async function recheck({ kv, key, token }) {
   const r = await post('/check', { token });
   if (r.ok || r.error === 'network' || r.error === 'server') return true;
   await kv.set(key, '');
+  try { const u = new URL(location.href); u.searchParams.delete('k'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch {}
   return false;
 }
 
