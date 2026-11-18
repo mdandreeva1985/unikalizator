@@ -68,7 +68,7 @@ export async function runInTelegram({ product, name, price, about }) {
   } else if (r.error === 'not_bought') {
     screen({
       title: name, text: `${about}<br><br>Стоимость: <b>${price}</b> один раз и навсегда.`,
-      button: `Купить ${name}`,
+      button: `Подключить ${name}`,
       onClick: () => { tg.openTelegramLink(`https://t.me/${BOT}?start=${product}`); setTimeout(() => tg.close(), 300); },
     });
   } else {
