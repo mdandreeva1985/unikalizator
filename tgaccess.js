@@ -92,14 +92,32 @@ export async function redeemPass({ product, kv, key }) {
   const r = await post('/redeem', { pass: p, product, device });
   if (!r.ok) return { error: r.error };
   await kv.set(key, r.token);
+  keepInUrl(r.token);
   try { await navigator.storage?.persist?.(); } catch {}
   return { token: r.token };
 }
 
-// Сохранённый доступ этого устройства (без интернета — просто есть ли он).
+// Ключ доступа живёт и в адресе страницы (?k=…). Тогда иконка на экране «Домой» (на iPhone у неё своя память,
+// отдельная от браузера) и скопированная ссылка открывают приложение сразу, без повторного входа через бота.
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function keepInUrl(token) {
+  try {
+    const u = new URL(location.href);
+    if (u.searchParams.get('k') !== token) { u.searchParams.set('k', token); history.replaceState(null, '', u.pathname + u.search + u.hash); }
+    // iPhone берёт адрес иконки из manifest (без ключа) — убираем его, чтобы иконка запомнила адрес с ключом
+    if (IS_IOS) document.querySelectorAll('link[rel="manifest"]').forEach((l) => l.remove());
+  } catch {}
+}
+
+// Сохранённый доступ: из адреса (?k=) или из памяти устройства.
 export async function savedToken({ kv, key, product }) {
-  const t = (await kv.get(key)).find((x) => new RegExp(`^\\d+\\.${product}\\.[0-9a-f]{32}\\.[0-9a-f]{64}$`).test(x));
-  return t || null;
+  const ok = (x) => new RegExp(`^\\d+\\.${product}\\.[0-9a-f]{32}\\.[0-9a-f]{64}$`).test(x || '');
+  const fromUrl = new URLSearchParams(location.search).get('k');
+  const t = ok(fromUrl) ? fromUrl : (await kv.get(key)).find(ok);
+  if (!t) return null;
+  await kv.set(key, t);
+  keepInUrl(t);
+  return t;
 }
 // Когда есть интернет — проверяем, что доступ не отозван (раз в сутки достаточно).
 export async function recheck({ kv, key, token }) {
