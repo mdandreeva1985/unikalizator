@@ -1,6 +1,6 @@
 // Сохраняет приложение на устройстве, чтобы оно работало без интернета.
 // При обновлении приложения увеличьте номер версии.
-const VERSION = 'uni-v28';
+const VERSION = 'uni-v29';
 const META = 'uni-meta';   // служебные данные приложения (дата пробного периода) — не удаляем при обновлении
 const FILES = [
   './', './index.html', './app.js', './codes.js', './tgaccess.js', './manifest.webmanifest',

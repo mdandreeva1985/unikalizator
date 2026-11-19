@@ -545,6 +545,25 @@ function finishCancelled(job) {
   if (job.results.length) job.ui.actions.style.display = 'flex';
 }
 
+// Понятная причина ошибки для человека
+function whyFailed(e, job) {
+  const m = String(e?.message || e || '');
+  const big = job.file.size > 300 * 1024 * 1024;
+  if (/H\.264|кодировать|encode|Encoder|codec/i.test(m)) return 'Телефон не смог сжать это видео. Попробуйте ролик короче или снятый в 1080p, а не в 4K.';
+  if (/memory|Memory|allocation|quota|QuotaExceeded/i.test(m) || big) return 'Не хватило памяти телефона. Выберите ролик покороче или делайте меньше копий за раз (например, 5).';
+  if (/decode|Decoder|format|Unsupported|нет видео/i.test(m)) return 'Этот формат видео телефон не открывает. Сохраните ролик заново (например, отправьте себе в Telegram и сохраните) и попробуйте ещё раз.';
+  return 'Не получилось сделать копию. Попробуйте ещё раз, не сворачивая окно и не блокируя экран.';
+}
+// Сообщаем об ошибке на сервер (без видео и личных данных), чтобы Мария могла понять причину
+function reportError(e, job) {
+  try {
+    fetch('https://apps-access.easy-reels-bot.workers.dev/log', { method: 'POST', headers: { 'content-type': 'application/json' }, keepalive: true,
+      body: JSON.stringify({ product: 'uniq', msg: String(e?.message || e).slice(0, 300), name: String(e?.name || ''),
+        size: job.file.size, type: job.file.type, copies: job.total, done: job.results.length, software: !!job.software,
+        standalone: !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches), ua: navigator.userAgent.slice(0, 200) }) }).catch(() => {});
+  } catch {}
+}
+
 async function run() {
   if (running) return;
   running = true;
@@ -604,8 +623,9 @@ async function run() {
       setPill(job, 'err', 'Ошибка');
       job.ui.count.textContent = (job.results.length
         ? `Готово ${job.results.length} из ${job.total}. `
-        : '') + 'Браузер не смог закодировать видео. Попробуйте ещё раз, не сворачивая окно.';
+        : '') + whyFailed(e, job);
       job.ui.count.title = String(e.message || e);
+      reportError(e, job);
       if (job.results.length) job.ui.actions.style.display = 'flex';
     }
   }

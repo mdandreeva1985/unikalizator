@@ -25,9 +25,11 @@ export const SETTINGS = {
   trimEnd: [0.05, 0.30],      // обрезка конца, сек
   // Качество видео — с запасом, чтобы не терять детали: для 1080×1920 при 30 кадрах 14–18 Мбит/с
   // (пропорционально меньше для меньших роликов), и не ниже 1,5× качества исходника.
-  bitrate1080: [14e6, 18e6],
-  bitrateVsSource: [1.5, 1.8],
-  bitrateMax: 30e6,
+  // (19.11) Снижено с 14–18 Мбит/с: на iPhone все копии хранятся в памяти, и длинные ролики переполняли её.
+  // 8–10 Мбит/с для 1080×1920 — всё ещё вдвое выше, чем соцсети оставляют после своей обработки.
+  bitrate1080: [8e6, 10e6],
+  bitrateVsSource: [1.0, 1.2],
+  bitrateMax: 12e6,
   audioBitrates: [160000, 192000],
   keyFrameSec: [1.5, 2.5],
   maxWidth: 1080,             // ролики шире (4K) уменьшаются до 1080
@@ -330,7 +332,8 @@ export async function makeCopy(file, onProgress = () => {}, opts = {}) {
       srcFps = st.averagePacketRate || 30;
     } catch {}
     if (!srcBitrate) srcBitrate = (file.size * 8) / Math.max(1, duration);
-    const fps = [24, 25, 30, 50, 60].reduce((a, b) => (Math.abs(b - srcFps) < Math.abs(a - srcFps) ? b : a));
+    // не больше 30 кадров в секунду: ролики 60 к/с с iPhone иначе вдвое тяжелее и дольше, а соцсетям 30 хватает
+    const fps = Math.min(30, [24, 25, 30, 50, 60].reduce((a, b) => (Math.abs(b - srcFps) < Math.abs(a - srcFps) ? b : a)));
     const area = (W * H) / (1080 * 1920);
     p.bitrate = Math.round(Math.min(SETTINGS.bitrateMax,
       // качество исходника пересчитываем на размер копии (4K-исходник «весит» больше, чем нужно для 1080)
