@@ -248,24 +248,68 @@ export async function detectEdgeText(file) {
 // ---------------------------------------------------------------------------
 // Звук: обрезка, скорость, лёгкий эквалайзер и громкость (Web Audio)
 // ---------------------------------------------------------------------------
-async function processAudio(track, t0, t1, p) {
-  const parts = [];
-  let sr = track.sampleRate, ch = Math.min(2, track.numberOfChannels || 2);
-  for await (const { buffer, timestamp } of new AudioBufferSink(track).buffers(t0, t1)) {
-    sr = buffer.sampleRate; ch = Math.min(2, buffer.numberOfChannels);
-    parts.push({ buffer, timestamp });
+// Звук всего файла через встроенный декодер браузера (запасной путь: на iPhone декодер WebCodecs
+// иногда падает с «InternalAudioDecoderCocoa decoding failed»). Результат запоминаем на все копии.
+const wholeAudio = new WeakMap();
+function decodeWholeFile(file) {
+  if (!wholeAudio.has(file)) {
+    wholeAudio.set(file, (async () => {
+      const ctx = new OfflineAudioContext(2, 1, 48000);
+      const buf = await new Promise((ok, fail) => {
+        file.arrayBuffer().then((ab) => {
+          const r = ctx.decodeAudioData(ab, ok, fail);
+          if (r && r.then) r.then(ok, fail);
+        }, fail);
+      });
+      return buf;
+    })().catch((e) => { wholeAudio.delete(file); throw e; }));
   }
-  if (!parts.length) return null;
-  const len = Math.max(1, Math.round((t1 - t0) * sr));
-  const data = Array.from({ length: ch }, () => new Float32Array(len));
-  for (const { buffer, timestamp } of parts) {
-    const off = Math.round((timestamp - t0) * sr);
-    for (let c = 0; c < ch; c++) {
-      const src = buffer.getChannelData(Math.min(c, buffer.numberOfChannels - 1));
-      const from = Math.max(0, -off), to = Math.min(src.length, len - off);
-      if (to > from) data[c].set(src.subarray(from, to), off + from);
+  return wholeAudio.get(file);
+}
+
+async function readAudio(track, file, t0, t1) {
+  // основной путь — декодер WebCodecs
+  try {
+    const parts = [];
+    let sr = track.sampleRate, ch = Math.min(2, track.numberOfChannels || 2);
+    for await (const { buffer, timestamp } of new AudioBufferSink(track).buffers(t0, t1)) {
+      sr = buffer.sampleRate; ch = Math.min(2, buffer.numberOfChannels);
+      parts.push({ buffer, timestamp });
     }
+    if (parts.length) {
+      const len = Math.max(1, Math.round((t1 - t0) * sr));
+      const data = Array.from({ length: ch }, () => new Float32Array(len));
+      for (const { buffer, timestamp } of parts) {
+        const off = Math.round((timestamp - t0) * sr);
+        for (let c = 0; c < ch; c++) {
+          const src = buffer.getChannelData(Math.min(c, buffer.numberOfChannels - 1));
+          const from = Math.max(0, -off), to = Math.min(src.length, len - off);
+          if (to > from) data[c].set(src.subarray(from, to), off + from);
+        }
+      }
+      return { data, sr, ch, len };
+    }
+  } catch (e) {
+    console.warn('Звук через WebCodecs не прочитался, пробую встроенный декодер:', e);
   }
+  // запасной путь — встроенный декодер браузера
+  const buf = await decodeWholeFile(file);
+  const sr = buf.sampleRate, ch = Math.min(2, buf.numberOfChannels);
+  const len = Math.max(1, Math.round((t1 - t0) * sr));
+  const from = Math.round(t0 * sr);
+  const data = Array.from({ length: ch }, (_, c) => {
+    const d = new Float32Array(len);
+    d.set(buf.getChannelData(c).subarray(from, from + len));
+    return d;
+  });
+  return { data, sr, ch, len };
+}
+
+async function processAudio(track, file, t0, t1, p) {
+  let got;
+  try { got = await readAudio(track, file, t0, t1); }
+  catch (e) { console.warn(e); throw new Error('Не получилось прочитать звук в этом ролике'); }
+  const { data, sr, ch, len } = got;
   const outLen = Math.ceil(len / p.speed);
   const ctx = new OfflineAudioContext(ch, outLen, sr);
   const inBuf = ctx.createBuffer(ch, len, sr);
@@ -357,9 +401,9 @@ export async function makeCopy(file, onProgress = () => {}, opts = {}) {
     output.addVideoTrack(vSource);
 
     let aSource = null, audio = null;
-    if (aTrack && (await aTrack.canDecode())) {
+    if (aTrack) {
       await ensureAac();
-      audio = await processAudio(aTrack, t0, t1, p);
+      audio = await processAudio(aTrack, file, t0, t1, p);
       if (audio) {
         aSource = new AudioBufferSource({ codec: 'aac', bitrate: p.audioBitrate });
         output.addAudioTrack(aSource);

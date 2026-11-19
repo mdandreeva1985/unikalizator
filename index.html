@@ -49,6 +49,9 @@ h1{margin:4px 0 6px;font-size:40px;line-height:1.1;font-weight:800;letter-spacin
   background:linear-gradient(90deg,var(--a1),var(--a2));color:#fff;font-size:20px;font-weight:700;box-shadow:0 10px 24px rgba(255,110,50,.28)}
 .pick svg{width:24px;height:24px}
 input[type=file]{display:none}
+/* поле выбора файла лежит прямо поверх кнопки (прозрачное): на iPhone так срабатывает с первого касания */
+.pick{position:relative;overflow:hidden}
+.pick input[type=file]{display:block;position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
 .hint{color:var(--muted);font-size:14px;text-align:center;margin:12px 0 0}
 h2{font-size:28px;margin:0 0 14px;font-weight:800;letter-spacing:-.3px}
 .empty{color:var(--muted);text-align:center;padding:26px 10px}
@@ -160,11 +163,11 @@ footer{color:var(--muted);font-size:14px;text-align:center;margin-top:32px;displ
     </div>
     <div class="quick" id="quick"></div>
 
-    <label class="pick" for="f">
+    <label class="pick">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>
       Выбрать видео
+      <input type="file" id="f" accept="video/*" multiple aria-label="Выбрать видео">
     </label>
-    <input type="file" id="f" accept="video/*" multiple>
     <p class="hint">Можно выбрать сразу несколько роликов</p>
   </section>
 
@@ -551,6 +554,7 @@ function whyFailed(e, job) {
   const big = job.file.size > 300 * 1024 * 1024;
   if (/H\.264|кодировать|encode|Encoder|codec/i.test(m)) return 'Телефон не смог сжать это видео. Попробуйте ролик короче или снятый в 1080p, а не в 4K.';
   if (/memory|Memory|allocation|quota|QuotaExceeded/i.test(m) || big) return 'Не хватило памяти телефона. Выберите ролик покороче или делайте меньше копий за раз (например, 5).';
+  if (/звук/i.test(m)) return 'Телефон не смог прочитать звук в этом ролике. Сохраните ролик заново (например, отправьте себе в Telegram и сохраните) и попробуйте ещё раз.';
   if (/decode|Decoder|format|Unsupported|нет видео/i.test(m)) return 'Этот формат видео телефон не открывает. Сохраните ролик заново (например, отправьте себе в Telegram и сохраните) и попробуйте ещё раз.';
   return 'Не получилось сделать копию. Попробуйте ещё раз, не сворачивая окно и не блокируя экран.';
 }
