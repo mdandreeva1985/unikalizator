@@ -13,6 +13,12 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
+<script>
+// Запоминаем ошибки запуска (старые телефоны), чтобы показать понятную причину и отправить отчёт
+window.__bootErrors = [];
+window.addEventListener('error', function (e) { window.__bootErrors.push(String(e.message || e.type) + (e.filename ? ' @' + String(e.filename).split('/').pop() : '')); });
+window.addEventListener('unhandledrejection', function (e) { window.__bootErrors.push('promise: ' + String(e.reason && e.reason.message || e.reason)); });
+</script>
 <script type="importmap">{ "imports": { "mediabunny": "./vendor/mediabunny.min.mjs" } }</script>
 <style>
 :root{
@@ -389,9 +395,13 @@ if (typeof VideoEncoder === 'undefined' && $('inapp').hidden) {
   $('inapp').hidden = false;
   $('inapp').querySelector('b').textContent = 'Этот браузер не умеет обрабатывать видео';
   $('inappText').textContent = /iPhone|iPad|iPod/.test(navigator.userAgent)
-    ?'Обновите iPhone до iOS 17 или новее (Настройки → Основные → Обновление ПО) и откройте приложение в Safari.'
-    : 'Откройте приложение в Chrome последней версии.';
+    ?'Обновите iPhone до iOS 17 или новее (Настройки → Основные → Обновление ПО) и откройте приложение в Safari. Если обновить нельзя — пользуйтесь на компьютере: один код работает на двух устройствах.'
+    : 'Обновите Chrome в Google Play и откройте приложение в нём. Если не помогло — пользуйтесь на компьютере: один код работает на двух устройствах.';
   $('inappOpen').hidden = true;
+  try {
+    fetch('https://apps-access.easy-reels-bot.workers.dev/log', { method: 'POST', headers: { 'content-type': 'application/json' }, keepalive: true,
+      body: JSON.stringify({ product: 'uniq', name: 'NoVideoEncoder', msg: 'браузер не умеет обрабатывать видео', ua: navigator.userAgent.slice(0, 200) }) }).catch(() => {});
+  } catch {}
 }
 
 // --- подсказка про установку ---
@@ -653,6 +663,50 @@ if ('serviceWorker' in navigator) {
 }
 window.__makeCopy = makeCopy;  // для автотестов
 window.__addVideo = addVideo;
+window.__appReady = true;      // приложение запустилось
+</script>
+
+<div id="bootfail" class="gate" hidden>
+  <div class="gate-card">
+    <span class="gate-t">Уникализатор</span>
+    <b style="font-size:19px">Приложение не запускается на этом телефоне</b>
+    <p id="bootText">Скорее всего, на телефоне устаревшая версия системы или браузера.</p>
+    <p class="muted" id="bootTech" style="font-size:12px;word-break:break-word"></p>
+    <a class="gate-buy-btn" href="https://t.me/marya_andreeva" target="_blank" rel="noopener">Написать в поддержку</a>
+  </div>
+</div>
+<script>
+// Если за 6 секунд приложение не запустилось — показываем понятную причину и отправляем отчёт.
+// Написано по-старому (var, function), чтобы работало даже на очень старых телефонах.
+setTimeout(function () {
+  if (window.__appReady) return;
+  var ua = navigator.userAgent, tip = '';
+  var ios = ua.match(/OS (\d+)_(\d+)/), chrome = ua.match(/Chrome\/(\d+)/), android = /Android/i.test(ua);
+  var inApp = /Instagram|FBAN|FBAV|Telegram|VKAndroid|; wv\)/i.test(ua);
+  if (inApp) {
+    tip = 'Приложение открыто внутри Instagram или Telegram. Откройте ссылку в Safari (iPhone) или Chrome (Android).';
+  } else if (/iPhone|iPad|iPod/.test(ua) && ios) {
+    var v = +ios[1] + ios[2] / 10;
+    tip = v < 16.4
+      ? 'На вашем iPhone система iOS ' + ios[1] + '.' + ios[2] + ', а нужна 16.4 или новее. Обновите: Настройки → Основные → Обновление ПО. Если iPhone обновить нельзя — пользуйтесь Уникализатором на компьютере: один код работает на двух устройствах.'
+      : 'Обновите iPhone до последней версии iOS и откройте приложение снова.';
+  } else if (android && chrome && +chrome[1] < 110) {
+    tip = 'На телефоне старая версия Chrome (' + chrome[1] + '). Обновите Chrome в Google Play и откройте приложение в нём. Если не помогло — пользуйтесь Уникализатором на компьютере: один код работает на двух устройствах.';
+  } else {
+    tip = 'Обновите браузер (Chrome или Safari) до последней версии и откройте приложение снова. Можно пользоваться и на компьютере: один код работает на двух устройствах.';
+  }
+  document.getElementById('bootText').textContent = tip;
+  document.getElementById('bootTech').textContent = 'Для поддержки: ' + ua.slice(0, 160) + (window.__bootErrors.length ? ' | ' + window.__bootErrors.join('; ').slice(0, 200) : '');
+  document.getElementById('bootfail').hidden = false;
+  try {
+    var x = new XMLHttpRequest();
+    x.open('POST', 'https://apps-access.easy-reels-bot.workers.dev/log');
+    x.setRequestHeader('content-type', 'application/json');
+    x.send(JSON.stringify({ product: 'uniq', name: 'BootFail', msg: ('не запустилось: ' + window.__bootErrors.join('; ')).slice(0, 300),
+      importmap: !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap')),
+      videoEncoder: typeof window.VideoEncoder !== 'undefined', ua: ua.slice(0, 200) }));
+  } catch (e) {}
+}, 6000);
 </script>
 </body>
 </html>
